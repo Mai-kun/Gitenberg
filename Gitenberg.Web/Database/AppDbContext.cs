@@ -1,4 +1,4 @@
-﻿using Gitenberg.Web.Models;
+using Gitenberg.Web.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Gitenberg.Web.Database;
@@ -14,5 +14,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             optionsBuilder.UseSqlite("Data Source=gitenberg.db");
         }
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<User>().HasKey(u => u.TelegramId);
     }
 }
