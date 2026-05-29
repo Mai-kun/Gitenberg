@@ -1,4 +1,7 @@
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Notes;
+using Gitenberg.Web.Services;
+using Gitenberg.Web.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -10,6 +13,10 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
+
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
+builder.Services.AddScoped<IGitHubService, GitHubService>();
 
 var app = builder.Build();
 
