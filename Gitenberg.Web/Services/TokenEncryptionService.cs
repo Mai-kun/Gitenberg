@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 
@@ -32,7 +31,6 @@ public class TokenEncryptionService : ITokenEncryptionService
             return encryptedToken;
         }
 
-        // Let CryptographicException propagate to the caller on validation failure or expiration.
         return _protector.Unprotect(encryptedToken);
     }
 }

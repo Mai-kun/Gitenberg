@@ -79,8 +79,6 @@ public class NotesEndpointsTests
         return (RepositoryContent)constructor.Invoke(args);
     }
 
-    #region GetNotes Tests
-
     [Fact]
     public async Task GetNotes_ShouldReturnBadRequest_WhenTelegramIdIsNull()
     {
@@ -208,10 +206,6 @@ public class NotesEndpointsTests
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
     }
 
-    #endregion
-
-    #region GetNoteContent Tests
-
     [Fact]
     public async Task GetNoteContent_ShouldReturnBadRequest_WhenPathIsMissing()
     {
@@ -307,10 +301,6 @@ public class NotesEndpointsTests
         contentProp.GetValue(value).Should().Be("Hello world note content");
     }
 
-    #endregion
-
-    #region CreateOrUpdateNote Tests
-
     [Fact]
     public async Task CreateOrUpdateNote_ShouldReturnBadRequest_WhenPathIsMissing()
     {
@@ -379,10 +369,6 @@ public class NotesEndpointsTests
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         requestCalled.Should().BeTrue();
     }
-
-    #endregion
-
-    #region DeleteNote Tests
 
     [Fact]
     public async Task DeleteNote_ShouldReturnBadRequest_WhenPathIsMissing()
@@ -478,6 +464,4 @@ public class NotesEndpointsTests
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         deleteCalled.Should().BeTrue();
     }
-
-    #endregion
 }
