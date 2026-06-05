@@ -480,3 +480,7 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# HTTP Client files
+Gitenberg.Web/Gitenberg.Web.http
+
