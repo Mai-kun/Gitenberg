@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Octokit;
@@ -7,10 +7,12 @@ namespace Gitenberg.Web.Services;
 
 public class GitHubService : IGitHubService
 {
-    public async Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context)
+    public async Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null)
     {
         var client = CreateClient(context.Token);
-        return await client.Repository.Content.GetAllContents(context.Owner, context.Repo);
+        return string.IsNullOrEmpty(path)
+            ? await client.Repository.Content.GetAllContents(context.Owner, context.Repo)
+            : await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
     }
 
     public async Task<string> GetNoteContentAsync(GitHubRepositoryContext context, string path)

@@ -1,4 +1,4 @@
-﻿using Gitenberg.Web.Models;
+using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Octokit;
 
@@ -6,15 +6,15 @@ namespace Gitenberg.Tests.Mocks;
 
 public class MockGitHubService : IGitHubService
 {
-    public Func<GitHubRepositoryContext, Task<IReadOnlyList<RepositoryContent>>>? GetNotesFunc { get; set; }
+    public Func<GitHubRepositoryContext, string?, Task<IReadOnlyList<RepositoryContent>>>? GetNotesFunc { get; set; }
     public Func<GitHubRepositoryContext, string, Task<string>>? GetNoteContentFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, string, Task>? CreateOrUpdateNoteFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, Task>? DeleteNoteFunc { get; set; }
 
-    public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context)
+    public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null)
     {
         return GetNotesFunc != null
-            ? GetNotesFunc(context)
+            ? GetNotesFunc(context, path)
             : Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent>());
     }
 

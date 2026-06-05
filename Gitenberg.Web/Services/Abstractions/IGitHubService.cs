@@ -1,11 +1,11 @@
-﻿using Gitenberg.Web.Models;
+using Gitenberg.Web.Models;
 using Octokit;
 
 namespace Gitenberg.Web.Services.Abstractions;
 
 public interface IGitHubService
 {
-    public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context);
+    public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null);
     public Task<string> GetNoteContentAsync(GitHubRepositoryContext context, string path);
 
     public Task CreateOrUpdateNoteAsync(

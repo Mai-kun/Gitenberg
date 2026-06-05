@@ -33,6 +33,7 @@ public static class NotesEndpoints
     }
 
     public static async Task<IResult> GetNotes(
+        [FromQuery] string? path,
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
@@ -66,7 +67,7 @@ public static class NotesEndpoints
         var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
         var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
-        var contents = await gitHubService.GetNotesAsync(context);
+        var contents = await gitHubService.GetNotesAsync(context, path);
         var notes = contents.Select(c => new
             {
                 c.Name,

@@ -86,7 +86,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, null, db, _encryptionService, _gitHubService);
+        var result = await NotesEndpoints.GetNotes(null, null, null, db, _encryptionService, _gitHubService);
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -101,7 +101,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(12345, null, db, _encryptionService, _gitHubService);
+        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService);
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -125,7 +125,7 @@ public class NotesEndpointsTests
         await db.SaveChangesAsync();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(12345, null, db, _encryptionService, _gitHubService);
+        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService);
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -158,16 +158,17 @@ public class NotesEndpointsTests
             "http://download",
             "http://html"
         );
-        _gitHubService.GetNotesFunc = ctx =>
+        _gitHubService.GetNotesFunc = (ctx, path) =>
         {
             ctx.Token.Should().Be("pat_123");
             ctx.Owner.Should().Be("owner");
             ctx.Repo.Should().Be("repo");
+            path.Should().BeNull();
             return Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { noteContent });
         };
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, 12345, db, _encryptionService, _gitHubService);
+        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService);
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -177,6 +178,49 @@ public class NotesEndpointsTests
         var valueResult = result as IValueHttpResult;
         valueResult.Should().NotBeNull();
         valueResult.Value.Should().BeAssignableTo<IEnumerable>();
+    }
+
+    [Fact]
+    public async Task GetNotes_ShouldPassPathToService_WhenPathIsProvided()
+    {
+        // Arrange
+        await using var db = CreateInMemoryDbContext();
+        var encryptedToken = _encryptionService.EncryptToken("pat_123", TimeSpan.FromMinutes(10));
+        var user = new User
+        {
+            TelegramId = 12345,
+            GitHubToken = encryptedToken,
+            RepositoryOwner = "owner",
+            RepositoryName = "repo",
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var noteContent = CreateRepositoryContent(
+            "subnote.md",
+            "subfolder/subnote.md",
+            "sha456",
+            150,
+            ContentType.File,
+            "http://download/subfolder",
+            "http://html/subfolder"
+        );
+        
+        var pathCaptured = string.Empty;
+        _gitHubService.GetNotesFunc = (ctx, path) =>
+        {
+            pathCaptured = path;
+            return Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { noteContent });
+        };
+
+        // Act
+        var result = await NotesEndpoints.GetNotes("subfolder", null, 12345, db, _encryptionService, _gitHubService);
+
+        // Assert
+        var statusCodeResult = result as IStatusCodeHttpResult;
+        statusCodeResult.Should().NotBeNull();
+        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        pathCaptured.Should().Be("subfolder");
     }
 
     [Fact]
@@ -195,10 +239,10 @@ public class NotesEndpointsTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        _gitHubService.GetNotesFunc = _ => throw new Exception("GitHub API down");
+        _gitHubService.GetNotesFunc = (_, _) => throw new Exception("GitHub API down");
 
         // Act
-        Func<Task> act = () => NotesEndpoints.GetNotes(12345, null, db, _encryptionService, _gitHubService);
+        Func<Task> act = () => NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService);
 
         // Assert
         await act.Should().ThrowAsync<Exception>().WithMessage("GitHub API down");
