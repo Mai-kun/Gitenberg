@@ -50,43 +50,32 @@ public static class RegistrationEndpoints
             return Results.BadRequest(new { Error = "Repository name is required." });
         }
 
-        try
+        var encryptedToken = encryptionService.EncryptToken(request.GitHubToken, TimeSpan.FromDays(365));
+
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == request.TelegramId);
+        if (user == null)
         {
-            var encryptedToken = encryptionService.EncryptToken(request.GitHubToken, TimeSpan.FromDays(365));
-
-            var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == request.TelegramId);
-            if (user == null)
+            user = new User
             {
-                user = new User
-                {
-                    TelegramId = request.TelegramId,
-                    GitHubToken = encryptedToken,
-                    RepositoryOwner = request.RepositoryOwner,
-                    RepositoryName = request.RepositoryName,
-                    CreatedAt = DateTime.UtcNow,
-                    LastActivityAt = DateTime.UtcNow,
-                };
-                dbContext.Users.Add(user);
-                await dbContext.SaveChangesAsync();
-
-                return Results.Ok(new { Message = "User registered successfully." });
-            }
-
-            user.GitHubToken = encryptedToken;
-            user.RepositoryOwner = request.RepositoryOwner;
-            user.RepositoryName = request.RepositoryName;
-            user.LastActivityAt = DateTime.UtcNow;
+                TelegramId = request.TelegramId,
+                GitHubToken = encryptedToken,
+                RepositoryOwner = request.RepositoryOwner,
+                RepositoryName = request.RepositoryName,
+                CreatedAt = DateTime.UtcNow,
+                LastActivityAt = DateTime.UtcNow,
+            };
+            dbContext.Users.Add(user);
             await dbContext.SaveChangesAsync();
 
-            return Results.Ok(new { Message = "User registration details updated successfully." });
+            return Results.Ok(new { Message = "User registered successfully." });
         }
-        catch (Exception ex)
-        {
-            return Results.Problem(
-                ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Error during user registration"
-            );
-        }
+
+        user.GitHubToken = encryptedToken;
+        user.RepositoryOwner = request.RepositoryOwner;
+        user.RepositoryName = request.RepositoryName;
+        user.LastActivityAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+
+        return Results.Ok(new { Message = "User registration details updated successfully." });
     }
 }

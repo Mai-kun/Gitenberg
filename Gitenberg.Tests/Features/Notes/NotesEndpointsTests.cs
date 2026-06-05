@@ -180,7 +180,7 @@ public class NotesEndpointsTests
     }
 
     [Fact]
-    public async Task GetNotes_ShouldReturnProblem_WhenGitHubServiceThrowsException()
+    public async Task GetNotes_ShouldThrowException_WhenGitHubServiceThrowsException()
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
@@ -198,12 +198,10 @@ public class NotesEndpointsTests
         _gitHubService.GetNotesFunc = _ => throw new Exception("GitHub API down");
 
         // Act
-        var result = await NotesEndpoints.GetNotes(12345, null, db, _encryptionService, _gitHubService);
+        Func<Task> act = () => NotesEndpoints.GetNotes(12345, null, db, _encryptionService, _gitHubService);
 
         // Assert
-        var statusCodeResult = result as IStatusCodeHttpResult;
-        statusCodeResult.Should().NotBeNull();
-        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        await act.Should().ThrowAsync<Exception>().WithMessage("GitHub API down");
     }
 
     [Fact]
@@ -222,7 +220,7 @@ public class NotesEndpointsTests
     }
 
     [Fact]
-    public async Task GetNoteContent_ShouldReturnNotFound_WhenNoteDoesNotExist()
+    public async Task GetNoteContent_ShouldThrowNotFoundException_WhenNoteDoesNotExist()
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
@@ -241,7 +239,7 @@ public class NotesEndpointsTests
             throw new NotFoundException("Not found", HttpStatusCode.NotFound);
 
         // Act
-        var result = await NotesEndpoints.GetNoteContent(
+        Func<Task> act = () => NotesEndpoints.GetNoteContent(
             "notes/missing.md",
             12345,
             null,
@@ -251,9 +249,7 @@ public class NotesEndpointsTests
         );
 
         // Assert
-        var statusCodeResult = result as IStatusCodeHttpResult;
-        statusCodeResult.Should().NotBeNull();
-        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        await act.Should().ThrowAsync<NotFoundException>().WithMessage("Not found");
     }
 
     [Fact]
@@ -386,7 +382,7 @@ public class NotesEndpointsTests
     }
 
     [Fact]
-    public async Task DeleteNote_ShouldReturnNotFound_WhenNoteDoesNotExist()
+    public async Task DeleteNote_ShouldThrowNotFoundException_WhenNoteDoesNotExist()
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
@@ -405,7 +401,7 @@ public class NotesEndpointsTests
             throw new NotFoundException("Not found", HttpStatusCode.NotFound);
 
         // Act
-        var result = await NotesEndpoints.DeleteNote(
+        Func<Task> act = () => NotesEndpoints.DeleteNote(
             "notes/missing.md",
             "delete msg",
             12345,
@@ -416,9 +412,7 @@ public class NotesEndpointsTests
         );
 
         // Assert
-        var statusCodeResult = result as IStatusCodeHttpResult;
-        statusCodeResult.Should().NotBeNull();
-        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        await act.Should().ThrowAsync<NotFoundException>().WithMessage("Not found");
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Registration;
+using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
@@ -17,8 +18,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
 builder.Services.AddScoped<IGitHubService, GitHubService>();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 using (var scope = app.Services.CreateScope())
 {

@@ -63,34 +63,23 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
         }
 
-        try
-        {
-            var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-            var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
+        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
+        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
-            var contents = await gitHubService.GetNotesAsync(context);
-            var notes = contents.Select(c => new
-                {
-                    c.Name,
-                    c.Path,
-                    c.Sha,
-                    c.Size,
-                    Type = c.Type.ToString(),
-                    c.DownloadUrl,
-                    c.HtmlUrl,
-                }
-            ).ToList();
+        var contents = await gitHubService.GetNotesAsync(context);
+        var notes = contents.Select(c => new
+            {
+                c.Name,
+                c.Path,
+                c.Sha,
+                c.Size,
+                Type = c.Type.ToString(),
+                c.DownloadUrl,
+                c.HtmlUrl,
+            }
+        ).ToList();
 
-            return Results.Ok(notes);
-        }
-        catch (Exception ex)
-        {
-            return Results.Problem(
-                ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Error retrieving notes from GitHub"
-            );
-        }
+        return Results.Ok(notes);
     }
 
     public static async Task<IResult> GetNoteContent(
@@ -130,26 +119,11 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
         }
 
-        try
-        {
-            var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-            var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
+        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
+        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
-            var content = await gitHubService.GetNoteContentAsync(context, path);
-            return Results.Ok(new { Path = path, Content = content });
-        }
-        catch (NotFoundException)
-        {
-            return Results.NotFound(new { Error = $"Note at path '{path}' not found." });
-        }
-        catch (Exception ex)
-        {
-            return Results.Problem(
-                ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Error retrieving note content from GitHub"
-            );
-        }
+        var content = await gitHubService.GetNoteContentAsync(context, path);
+        return Results.Ok(new { Path = path, Content = content });
     }
 
     public static async Task<IResult> CreateOrUpdateNote(
@@ -189,31 +163,20 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
         }
 
-        try
-        {
-            var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-            var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
+        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
+        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
-            var commitMessage = string.IsNullOrWhiteSpace(request.CommitMessage)
-                ? $"Update note: {request.Path}"
-                : request.CommitMessage;
+        var commitMessage = string.IsNullOrWhiteSpace(request.CommitMessage)
+            ? $"Update note: {request.Path}"
+            : request.CommitMessage;
 
-            await gitHubService.CreateOrUpdateNoteAsync(
-                context,
-                request.Path,
-                request.Content ?? string.Empty,
-                commitMessage
-            );
-            return Results.Ok(new { Message = $"Note at '{request.Path}' successfully created or updated." });
-        }
-        catch (Exception ex)
-        {
-            return Results.Problem(
-                ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Error creating or updating note in GitHub"
-            );
-        }
+        await gitHubService.CreateOrUpdateNoteAsync(
+            context,
+            request.Path,
+            request.Content ?? string.Empty,
+            commitMessage
+        );
+        return Results.Ok(new { Message = $"Note at '{request.Path}' successfully created or updated." });
     }
 
     public static async Task<IResult> DeleteNote(
@@ -254,29 +217,14 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
         }
 
-        try
-        {
-            var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-            var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
+        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
+        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
-            var commit = string.IsNullOrWhiteSpace(commitMessage)
-                ? $"Delete note: {path}"
-                : commitMessage;
+        var commit = string.IsNullOrWhiteSpace(commitMessage)
+            ? $"Delete note: {path}"
+            : commitMessage;
 
-            await gitHubService.DeleteNoteAsync(context, path, commit);
-            return Results.Ok(new { Message = $"Note at '{path}' successfully deleted." });
-        }
-        catch (NotFoundException)
-        {
-            return Results.NotFound(new { Error = $"Note at path '{path}' not found." });
-        }
-        catch (Exception ex)
-        {
-            return Results.Problem(
-                ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Error deleting note from GitHub"
-            );
-        }
+        await gitHubService.DeleteNoteAsync(context, path, commit);
+        return Results.Ok(new { Message = $"Note at '{path}' successfully deleted." });
     }
 }
