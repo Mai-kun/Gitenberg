@@ -1,5 +1,6 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Notes;
+using Gitenberg.Web.Features.Registration;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,7 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapNotesEndpoints();
+app.MapRegistrationEndpoints();
 
 app.UseHttpsRedirection();
 app.Run();
