@@ -205,7 +205,7 @@ public class NotesEndpointsTests
             "http://download/subfolder",
             "http://html/subfolder"
         );
-        
+
         var pathCaptured = string.Empty;
         _gitHubService.GetNotesFunc = (ctx, path) =>
         {

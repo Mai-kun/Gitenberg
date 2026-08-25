@@ -69,15 +69,15 @@ public static class NotesEndpoints
 
         var contents = await gitHubService.GetNotesAsync(context, path);
         var notes = contents.Select(c => new
-            {
-                c.Name,
-                c.Path,
-                c.Sha,
-                c.Size,
-                Type = c.Type.ToString(),
-                c.DownloadUrl,
-                c.HtmlUrl,
-            }
+        {
+            c.Name,
+            c.Path,
+            c.Sha,
+            c.Size,
+            Type = c.Type.ToString(),
+            c.DownloadUrl,
+            c.HtmlUrl,
+        }
         ).ToList();
 
         return Results.Ok(notes);

@@ -3,16 +3,12 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace Gitenberg.Web.Services;
 
-public class TokenEncryptionService : ITokenEncryptionService
+public class TokenEncryptionService(IDataProtectionProvider dataProtectionProvider)
+    : ITokenEncryptionService
 {
-    private readonly ITimeLimitedDataProtector _protector;
-
-    public TokenEncryptionService(IDataProtectionProvider dataProtectionProvider)
-    {
-        _protector = dataProtectionProvider
-                     .CreateProtector("Gitenberg.TokenEncryption")
-                     .ToTimeLimitedDataProtector();
-    }
+    private readonly ITimeLimitedDataProtector _protector = dataProtectionProvider
+        .CreateProtector("Gitenberg.TokenEncryption")
+        .ToTimeLimitedDataProtector();
 
     public string EncryptToken(string token, TimeSpan lifetime)
     {

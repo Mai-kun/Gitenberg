@@ -149,7 +149,7 @@ public class RegistrationEndpointsTests
         user.Should().NotBeNull();
         user!.RepositoryOwner.Should().Be("owner");
         user.RepositoryName.Should().Be("repo");
-        
+
         var decryptedToken = _encryptionService.DecryptToken(user.GitHubToken!);
         decryptedToken.Should().Be("github_pat_key");
 
