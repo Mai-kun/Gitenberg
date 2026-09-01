@@ -4,12 +4,18 @@ using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Octokit;
 
 namespace Gitenberg.Web.Features.Notes;
 
 public static class NotesEndpoints
 {
+    private static string GetCacheKey(long telegramId, string? path)
+    {
+        return $"notes_{telegramId}_{path ?? string.Empty}";
+    }
+
     public static void MapNotesEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/notes")
@@ -38,7 +44,8 @@ public static class NotesEndpoints
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
-        IGitHubService gitHubService
+        IGitHubService gitHubService,
+        IMemoryCache memoryCache
     )
     {
         var telegramId = headerTelegramId ?? queryTelegramId;
@@ -53,34 +60,7 @@ public static class NotesEndpoints
             );
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
-        if (user == null)
-        {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
-        }
-
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
-        {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
-        }
-
-        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
-
-        var contents = await gitHubService.GetNotesAsync(context, path);
-        var notes = contents.Select(c => new
-        {
-            c.Name,
-            c.Path,
-            c.Sha,
-            c.Size,
-            Type = c.Type.ToString(),
-            c.DownloadUrl,
-            c.HtmlUrl,
-        }
-        ).ToList();
-
-        return Results.Ok(notes);
+        return await GetNotesCachedAsync(telegramId.Value, path, dbContext, encryptionService, gitHubService, memoryCache);
     }
 
     public static async Task<IResult> GetNoteContent(
@@ -133,7 +113,8 @@ public static class NotesEndpoints
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
-        IGitHubService gitHubService
+        IGitHubService gitHubService,
+        IMemoryCache memoryCache
     )
     {
         var telegramId = headerTelegramId ?? queryTelegramId;
@@ -177,6 +158,9 @@ public static class NotesEndpoints
             request.Content ?? string.Empty,
             commitMessage
         );
+
+        BustUserCache(memoryCache, telegramId.Value);
+
         return Results.Ok(new { Message = $"Note at '{request.Path}' successfully created or updated." });
     }
 
@@ -187,7 +171,8 @@ public static class NotesEndpoints
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
-        IGitHubService gitHubService
+        IGitHubService gitHubService,
+        IMemoryCache memoryCache
     )
     {
         var telegramId = headerTelegramId ?? queryTelegramId;
@@ -226,6 +211,83 @@ public static class NotesEndpoints
             : commitMessage;
 
         await gitHubService.DeleteNoteAsync(context, path, commit);
+
+        BustUserCache(memoryCache, telegramId.Value);
+
         return Results.Ok(new { Message = $"Note at '{path}' successfully deleted." });
+    }
+
+    private static void BustUserCache(IMemoryCache memoryCache, long telegramId)
+    {
+        var ctsKey = $"notes_cts_{telegramId}";
+        if (memoryCache.TryGetValue(ctsKey, out CancellationTokenSource? cts))
+        {
+            cts?.Cancel();
+            cts?.Dispose();
+        }
+        memoryCache.Remove(ctsKey);
+    }
+
+    public static async Task<IResult> GetNotesCachedAsync(
+        long telegramId,
+        string? path,
+        AppDbContext dbContext,
+        ITokenEncryptionService encryptionService,
+        IGitHubService gitHubService,
+        IMemoryCache memoryCache
+    )
+    {
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        if (user == null)
+        {
+            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+        }
+
+        if (string.IsNullOrWhiteSpace(user.GitHubToken))
+        {
+            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
+        }
+
+        var cacheKey = GetCacheKey(telegramId, path);
+        var ctsKey = $"notes_cts_{telegramId}";
+
+        var cts = memoryCache.GetOrCreate(ctsKey, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(24);
+            return new CancellationTokenSource();
+        });
+
+        if (memoryCache.TryGetValue(cacheKey, out List<object>? cachedNotes) && cachedNotes != null)
+        {
+            return Results.Ok(cachedNotes);
+        }
+
+        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
+        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
+
+        var contents = await gitHubService.GetNotesAsync(context, path);
+        var notes = contents.Select(c => (object)new
+        {
+            c.Name,
+            c.Path,
+            c.Sha,
+            c.Size,
+            Type = c.Type.ToString(),
+            c.DownloadUrl,
+            c.HtmlUrl,
+        }
+        ).ToList();
+
+        var cacheEntryOptions = new MemoryCacheEntryOptions()
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
+
+        if (cts != null)
+        {
+            cacheEntryOptions.AddExpirationToken(new Microsoft.Extensions.Primitives.CancellationChangeToken(cts.Token));
+        }
+
+        memoryCache.Set(cacheKey, notes, cacheEntryOptions);
+
+        return Results.Ok(notes);
     }
 }
