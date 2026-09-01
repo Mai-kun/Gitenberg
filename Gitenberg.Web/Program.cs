@@ -3,6 +3,7 @@ using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Registration;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.TelegramBot;
+using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
@@ -32,6 +33,7 @@ builder.Services.AddHttpClient("tgwebhook")
        .AddTypedClient<ITelegramBotClient>((httpClient, sp) => new TelegramBotClient(botConfig.BotToken, httpClient));
 builder.Services.AddScoped<UpdateHandler>();
 builder.Services.AddHostedService<ConfigureWebhook>();
+builder.Services.AddSingleton<ITelegramAuthValidator>(_ => new TelegramAuthValidator(botConfig.BotToken));
 
 var searchConfig = builder.Configuration.GetSection(SearchConfiguration.SectionName).Get<SearchConfiguration>()
                 ?? new SearchConfiguration();

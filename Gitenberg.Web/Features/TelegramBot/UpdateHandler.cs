@@ -50,7 +50,7 @@ public class UpdateHandler(
                     InlineKeyboardButton.WithWebApp("Открыть заметки", new WebAppInfo { Url = botConfig.HostAddress })
                 );
 
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     message.Chat.Id,
                     text,
                     replyMarkup: replyMarkup,
@@ -65,7 +65,7 @@ public class UpdateHandler(
                     InlineKeyboardButton.WithWebApp("Зарегистрироваться", new WebAppInfo { Url = botConfig.HostAddress })
                 );
 
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     message.Chat.Id,
                     text,
                     replyMarkup: replyMarkup,

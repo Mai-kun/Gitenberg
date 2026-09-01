@@ -1,5 +1,6 @@
 using System.Globalization;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.TelegramBot.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,8 @@ public static class SearchEndpoints
     public static void MapSearchEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/notes")
-                       .WithTags("Search");
+                       .WithTags("Search")
+                       .RequireTelegramAuth();
 
         group.MapGet("/search", SearchNotes)
              .WithName("SearchNotes")
@@ -22,10 +24,11 @@ public static class SearchEndpoints
         [FromQuery] string? query,
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
-        AppDbContext dbContext
+        AppDbContext dbContext,
+        HttpContext? httpContext = null
     )
     {
-        var telegramId = headerTelegramId ?? queryTelegramId;
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
         if (telegramId == null)
         {
             return Results.BadRequest(

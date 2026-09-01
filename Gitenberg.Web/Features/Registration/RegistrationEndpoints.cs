@@ -1,5 +1,6 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
+using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +13,8 @@ public static class RegistrationEndpoints
     public static void MapRegistrationEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/register")
-                       .WithTags("Registration");
+                       .WithTags("Registration")
+                       .RequireTelegramAuth();
 
         group.MapPost("/", RegisterUser)
              .WithName("RegisterUser")
@@ -22,7 +24,10 @@ public static class RegistrationEndpoints
     public static async Task<IResult> RegisterUser(
         [FromBody] RegisterUserRequest? request,
         AppDbContext dbContext,
-        ITokenEncryptionService encryptionService
+        ITokenEncryptionService encryptionService,
+        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId = null,
+        [FromQuery(Name = "telegramId")] long? queryTelegramId = null,
+        HttpContext? httpContext = null
     )
     {
         if (request == null)
@@ -30,7 +35,10 @@ public static class RegistrationEndpoints
             return Results.BadRequest(new { Error = "Request body is required." });
         }
 
-        if (request.TelegramId <= 0)
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId)
+                         ?? request.TelegramId;
+
+        if (telegramId <= 0)
         {
             return Results.BadRequest(new { Error = "Telegram ID must be greater than zero." });
         }
@@ -52,12 +60,12 @@ public static class RegistrationEndpoints
 
         var encryptedToken = encryptionService.EncryptToken(request.GitHubToken, TimeSpan.FromDays(365));
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == request.TelegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
         if (user == null)
         {
             user = new User
             {
-                TelegramId = request.TelegramId,
+                TelegramId = telegramId,
                 GitHubToken = encryptedToken,
                 RepositoryOwner = request.RepositoryOwner,
                 RepositoryName = request.RepositoryName,

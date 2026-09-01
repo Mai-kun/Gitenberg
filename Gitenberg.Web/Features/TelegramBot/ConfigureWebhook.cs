@@ -26,7 +26,7 @@ public class ConfigureWebhook(
         var webhookAddress = $"{botConfig.HostAddress.TrimEnd('/')}/api/bot/webhook";
         logger.LogInformation("Setting webhook to: {WebhookAddress}", webhookAddress);
 
-        await botClient.SetWebhookAsync(
+        await botClient.SetWebhook(
             url: webhookAddress,
             allowedUpdates: [UpdateType.Message],
             secretToken: botConfig.SecretToken,
@@ -39,7 +39,7 @@ public class ConfigureWebhook(
         logger.LogInformation("Removing webhook");
         try
         {
-            await botClient.DeleteWebhookAsync(cancellationToken: cancellationToken);
+            await botClient.DeleteWebhook(cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

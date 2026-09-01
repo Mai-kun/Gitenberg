@@ -1,5 +1,6 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
+using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -19,7 +20,8 @@ public static class NotesEndpoints
     public static void MapNotesEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/notes")
-                       .WithTags("Notes");
+                       .WithTags("Notes")
+                       .RequireTelegramAuth();
 
         group.MapGet("/", GetNotes)
              .WithName("GetNotes")
@@ -45,10 +47,11 @@ public static class NotesEndpoints
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         IGitHubService gitHubService,
-        IMemoryCache memoryCache
+        IMemoryCache memoryCache,
+        HttpContext? httpContext = null
     )
     {
-        var telegramId = headerTelegramId ?? queryTelegramId;
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
         if (telegramId == null)
         {
             return Results.BadRequest(
@@ -69,10 +72,11 @@ public static class NotesEndpoints
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
-        IGitHubService gitHubService
+        IGitHubService gitHubService,
+        HttpContext? httpContext = null
     )
     {
-        var telegramId = headerTelegramId ?? queryTelegramId;
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
         if (telegramId == null)
         {
             return Results.BadRequest(
@@ -114,10 +118,11 @@ public static class NotesEndpoints
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         IGitHubService gitHubService,
-        IMemoryCache memoryCache
+        IMemoryCache memoryCache,
+        HttpContext? httpContext = null
     )
     {
-        var telegramId = headerTelegramId ?? queryTelegramId;
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
         if (telegramId == null)
         {
             return Results.BadRequest(
@@ -172,10 +177,11 @@ public static class NotesEndpoints
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         IGitHubService gitHubService,
-        IMemoryCache memoryCache
+        IMemoryCache memoryCache,
+        HttpContext? httpContext = null
     )
     {
-        var telegramId = headerTelegramId ?? queryTelegramId;
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
         if (telegramId == null)
         {
             return Results.BadRequest(
