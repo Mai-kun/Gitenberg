@@ -1,6 +1,7 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Registration;
+using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Services;
@@ -32,6 +33,12 @@ builder.Services.AddHttpClient("tgwebhook")
 builder.Services.AddScoped<UpdateHandler>();
 builder.Services.AddHostedService<ConfigureWebhook>();
 
+var searchConfig = builder.Configuration.GetSection(SearchConfiguration.SectionName).Get<SearchConfiguration>()
+                ?? new SearchConfiguration();
+builder.Services.AddSingleton(searchConfig);
+builder.Services.AddScoped<NoteIndexer>();
+builder.Services.AddHostedService<NoteIndexingService>();
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -40,6 +47,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+    db.EnsureFtsTableCreated();
 }
 
 if (app.Environment.IsDevelopment())
@@ -54,6 +62,7 @@ app.UseStaticFiles();
 app.MapNotesEndpoints();
 app.MapRegistrationEndpoints();
 app.MapBotEndpoints();
+app.MapSearchEndpoints();
 
 app.UseHttpsRedirection();
 app.Run();
