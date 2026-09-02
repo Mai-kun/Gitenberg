@@ -17,7 +17,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
+        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
 builder.Services.AddDataProtection();
@@ -26,17 +26,21 @@ builder.Services.AddScoped<IGitHubService, GitHubService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
-var botConfig = builder.Configuration.GetSection(BotConfiguration.SectionName).Get<BotConfiguration>()
+var botConfig = builder.Configuration
+                        .GetSection(BotConfiguration.SectionName)
+                        .Get<BotConfiguration>()
                 ?? new BotConfiguration();
 builder.Services.AddSingleton(botConfig);
 builder.Services.AddHttpClient("tgwebhook")
-       .AddTypedClient<ITelegramBotClient>((httpClient, sp) => new TelegramBotClient(botConfig.BotToken, httpClient));
+        .AddTypedClient<ITelegramBotClient>((httpClient, sp) => new TelegramBotClient(botConfig.BotToken, httpClient));
 builder.Services.AddScoped<UpdateHandler>();
 builder.Services.AddHostedService<ConfigureWebhook>();
 builder.Services.AddSingleton<ITelegramAuthValidator>(_ => new TelegramAuthValidator(botConfig.BotToken));
 
-var searchConfig = builder.Configuration.GetSection(SearchConfiguration.SectionName).Get<SearchConfiguration>()
-                ?? new SearchConfiguration();
+var searchConfig = builder.Configuration
+                           .GetSection(SearchConfiguration.SectionName)
+                           .Get<SearchConfiguration>()
+                   ?? new SearchConfiguration();
 builder.Services.AddSingleton(searchConfig);
 builder.Services.AddScoped<NoteIndexer>();
 builder.Services.AddHostedService<NoteIndexingService>();

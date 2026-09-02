@@ -1,13 +1,12 @@
-using Microsoft.Extensions.Hosting;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 
 namespace Gitenberg.Web.Features.TelegramBot;
 
 public class ConfigureWebhook(
-    ITelegramBotClient botClient,
-    BotConfiguration botConfig,
-    ILogger<ConfigureWebhook> logger) : IHostedService
+        ITelegramBotClient botClient,
+        BotConfiguration botConfig,
+        ILogger<ConfigureWebhook> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -23,15 +22,22 @@ public class ConfigureWebhook(
             return;
         }
 
-        var webhookAddress = $"{botConfig.HostAddress.TrimEnd('/')}/api/bot/webhook";
-        logger.LogInformation("Setting webhook to: {WebhookAddress}", webhookAddress);
+        try
+        {
+            var webhookAddress = $"{botConfig.HostAddress.TrimEnd('/')}/api/bot/webhook";
+            logger.LogInformation("Setting webhook to: {WebhookAddress}", webhookAddress);
 
-        await botClient.SetWebhook(
-            url: webhookAddress,
-            allowedUpdates: [UpdateType.Message],
-            secretToken: botConfig.SecretToken,
-            cancellationToken: cancellationToken
-        );
+            await botClient.SetWebhook(
+                    webhookAddress,
+                    allowedUpdates: [UpdateType.Message],
+                    secretToken: botConfig.SecretToken,
+                    cancellationToken: cancellationToken
+            );
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Не удалось установить вебхук в Telegram.");
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)

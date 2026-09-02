@@ -490,3 +490,4 @@ Gitenberg.Web/gitenberg.db-wal
 AGENT.md
 .aider*
 .zcode
+Gitenberg.Web/appsettings.Development.json
