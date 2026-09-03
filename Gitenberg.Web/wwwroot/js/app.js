@@ -201,7 +201,12 @@ function showToast(message, ms = 2200) {
 }
 
 function showErrorToast(error) {
-  const message = error instanceof api.ApiError ? error.message : STRINGS.errorPrefix;
+  let message = STRINGS.loadFailed;
+  if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
+    message = error.message;
+  } else if (typeof error === 'string' && error.trim()) {
+    message = error;
+  }
   showToast(`${STRINGS.errorPrefix}: ${message}`);
   haptic('error');
 }
@@ -343,15 +348,17 @@ function renderNotes(items) {
   }
   setStatus('');
 
+  const isDirectory = (item) => (item?.type || '').toLowerCase() === 'dir';
+
   const sorted = [...items].sort((a, b) => {
-    const aDir = a.type === 'Dir' ? 0 : 1;
-    const bDir = b.type === 'Dir' ? 0 : 1;
+    const aDir = isDirectory(a) ? 0 : 1;
+    const bDir = isDirectory(b) ? 0 : 1;
     if (aDir !== bDir) return aDir - bDir;
     return String(a.name).localeCompare(String(b.name), 'ru', { sensitivity: 'base' });
   });
 
   for (const item of sorted) {
-    const isDir = item.type === 'Dir';
+    const isDir = isDirectory(item);
     const isMd = /\.md$/i.test(String(item.name));
 
     const row = document.createElement('button');
@@ -360,7 +367,9 @@ function renderNotes(items) {
 
     const icon = document.createElement('span');
     icon.className = 'note-icon';
+    // 📁 folders / 📄 files (SVG icons mirror the emoji affordance)
     icon.innerHTML = isDir ? FOLDER_ICON : FILE_ICON;
+    icon.setAttribute('aria-label', isDir ? '📁' : '📄');
 
     const body = document.createElement('span');
     body.className = 'note-body';
@@ -388,7 +397,10 @@ function renderNotes(items) {
     }
 
     if (isDir) {
-      row.addEventListener('click', () => enterExplorer(item.path));
+      // Navigate into the folder (loadFolder + breadcrumbs via enterExplorer).
+      row.addEventListener('click', () => {
+        void enterExplorer(item.path);
+      });
     } else if (isMd) {
       row.addEventListener('click', () => openEditor('edit', item.path));
     } else {

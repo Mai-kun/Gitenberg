@@ -62,22 +62,33 @@ async function extractError(response) {
   } catch {
     /* body unavailable */
   }
-  if (text) {
-    try {
-      const data = JSON.parse(text);
-      // Handled endpoint errors: {"error": "..."} (camelCase Web defaults).
-      if (data && typeof data.error === 'string') return data.error;
-      // ProblemDetails from GlobalExceptionHandler: {"title": "...", "detail": "..."}.
-      if (data && typeof data === 'object') {
-        if (typeof data.detail === 'string') return data.detail;
-        if (typeof data.title === 'string') return data.title;
-      }
-    } catch {
-      /* not JSON */
+
+  const fallback = `HTTP ${response.status}: ${response.statusText || ''}`.trim()
+    || 'Неизвестная ошибка';
+
+  if (!text) return fallback;
+
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data === 'object') {
+      // Prefer ProblemDetails detail/title, then custom error/message payloads.
+      const message =
+        (typeof data.detail === 'string' && data.detail) ||
+        (typeof data.title === 'string' && data.title) ||
+        (typeof data.error === 'string' && data.error) ||
+        (typeof data.message === 'string' && data.message) ||
+        (typeof data.Error === 'string' && data.Error) ||
+        (typeof data.Message === 'string' && data.Message);
+      if (message) return message;
     }
-    return text;
+  } catch {
+    /* not JSON — fall through to raw text */
   }
-  return `Ошибка запроса (${response.status})`;
+
+  // Avoid surfacing a bare "Ошибка" with no useful context.
+  const trimmed = text.trim();
+  if (!trimmed || trimmed === 'Ошибка') return fallback;
+  return trimmed;
 }
 
 async function request(method, path, { params, body } = {}) {

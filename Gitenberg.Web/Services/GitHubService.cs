@@ -21,7 +21,39 @@ public class GitHubService : IGitHubService
     {
         var client = CreateClient(context.Token);
         var contents = await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
+
+        // Directory paths must not be read as notes. GitHub returns either:
+        //  - a single file entry (Type=File), or
+        //  - the directory's children (Type=Dir on entries / null Content / path mismatch).
+        if (contents is null || contents.Count == 0)
+        {
+            throw new ArgumentException($"Path '{path}' is a directory, not a readable file.");
+        }
+
         var file = contents[0];
+        if (file.Type == ContentType.Dir || string.IsNullOrEmpty(file.Content))
+        {
+            // Distinguish a true directory from a large file whose Content is omitted (>1 MB).
+            // Large files still have Type=File and a matching path; directories do not.
+            var normalizedPath = path.Trim('/');
+            var pathMatches = string.Equals(
+                file.Path?.Trim('/'),
+                normalizedPath,
+                StringComparison.OrdinalIgnoreCase
+            );
+            var looksLikeDirectory =
+                file.Type == ContentType.Dir
+                || contents.Count > 1
+                || !pathMatches
+                || file.Type != ContentType.File;
+
+            if (looksLikeDirectory)
+            {
+                throw new ArgumentException($"Path '{path}' is a directory, not a readable file.");
+            }
+        }
+
+        // Content may still be null/empty for very large files; callers handle that.
         return file.Content;
     }
 
