@@ -41,29 +41,9 @@ function enhancePreviewHtml(html) {
 
   // Obsidian callouts: > [!info] Title / > body — replace the blockquote
   // with a themed box. marked may keep the whole callout in one <p>
-  // (title + <br> + body) or split it into two paragraphs.
-  out = out.replace(/<blockquote>\s*<p>\s*\[!(\w+)\]([\s\S]*?)<\/blockquote>/g,
-    (_, type, rest) => {
-      const t = type.toLowerCase();
-      const icon = CALLOUT_ICONS[t] || 'ℹ️';
-      const brIdx = rest.search(/<br\s*\/?>/);
-      const pEnd = rest.search(/<\/p>/);
-      let title;
-      let body;
-      if (brIdx !== -1 && (pEnd === -1 || brIdx < pEnd)) {
-        title = rest.slice(0, brIdx);
-        body = rest.slice(brIdx).replace(/^<br\s*\/?>/, '');
-      } else if (pEnd !== -1) {
-        title = rest.slice(0, pEnd);
-        body = rest.slice(pEnd + 4);
-      } else {
-        title = rest;
-        body = '';
-      }
-      return `<div class="callout callout-${t}"><div class="callout-title">`
-        + `<span class="callout-icon">${icon}</span>${title.trim() || type}</div>`
-        + `<div class="callout-body">${body.trim()}</div></div>`;
-    });
+  // (title + <br> + body) or split it into two paragraphs. Nested callouts
+  // (a blockquote inside a blockquote) are handled innermost-first.
+  out = renderCallouts(out);
 
   // Dataview queries: replace the code block with a placeholder that the
   // async renderer fills in (previewRender is synchronous).
@@ -90,6 +70,57 @@ const CALLOUT_ICONS = {
   failure: '❌', fail: '❌', missing: '❌',
   example: '📋', quote: '❝', cite: '❝', abstract: '📋', summary: '📋', todo: '☑️',
 };
+
+// Convert > [!type] blockquotes to themed callout boxes. Innermost
+// blockquotes are processed first, so nested callouts (> > [!warning] inside
+// > [!info]) already exist as divs when their parent is rendered.
+function renderCallouts(html) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    html = html.replace(
+      /<blockquote>((?:(?!<\/?blockquote>)[\s\S])*?)<\/blockquote>/g,
+      (whole, inner) => {
+        const start = inner.match(/^\s*<p>\s*\[!(\w+)\]/);
+        if (!start) return whole; // an ordinary quote — keep it
+
+        const type = start[1].toLowerCase();
+        const icon = CALLOUT_ICONS[type] || 'ℹ️';
+        // marked keeps single newlines inside <p> as raw "\n"; without this a
+        // multi-line callout puts its first body line into the title. Turn
+        // them into <br> so lines stay separated.
+        const rest = inner.slice(start[0].length).replace(/\r?\n/g, '<br>');
+        const brIdx = rest.search(/<br\s*\/?>/);
+        const pEnd = rest.search(/<\/p>/);
+        let title;
+        let body;
+        if (brIdx !== -1 && (pEnd === -1 || brIdx < pEnd)) {
+          title = rest.slice(0, brIdx);
+          body = rest.slice(brIdx).replace(/^<br\s*\/?>/, '');
+          // The callout's own <p> was consumed with the title, so the first
+          // </p> in the body is its stray closer (it precedes nested blocks).
+          const strayEnd = body.search(/<\/p>/);
+          if (strayEnd !== -1) body = body.slice(0, strayEnd) + body.slice(strayEnd + 4);
+        } else if (pEnd !== -1) {
+          title = rest.slice(0, pEnd);
+          body = rest.slice(pEnd + 4);
+        } else {
+          title = rest;
+          body = '';
+        }
+        // Newlines converted to <br> that sit on block boundaries (before or
+        // right after a nested callout / paragraph) are just whitespace.
+        body = body.replace(/<br>\s*(?=<(?:div|p|blockquote|ul|ol|table|pre|h[1-6])[\s>])/gi, '');
+        body = body.replace(/(<\/(?:div|p|blockquote|ul|ol|table|pre|h[1-6])>)\s*(?:<br>\s*)+/gi, '$1');
+        changed = true;
+        return `<div class="callout callout-${type}"><div class="callout-title">`
+          + `<span class="callout-icon">${icon}</span>${title.trim() || type}</div>`
+          + `<div class="callout-body">${body.trim()}</div></div>`;
+      }
+    );
+  }
+  return html;
+}
 
 // YAML frontmatter of regular notes: rendered as a metadata card above the
 // note (tags inside become clickable chips). Kanban boards handle their own

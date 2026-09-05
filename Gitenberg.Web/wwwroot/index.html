@@ -148,6 +148,11 @@
   <!-- ============ View: Settings ============ -->
   <section id="view-settings" class="view" hidden>
     <header class="explorer-header">
+      <button id="btn-settings-back" class="icon-btn" data-i18n-title="back" aria-label="Назад" title="Назад">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
       <h1 data-i18n="settingsTitle">Настройки</h1>
     </header>
     <div class="settings-body">
@@ -167,10 +172,23 @@
         <input id="settings-autosave" type="checkbox">
         <span data-i18n="autosaveLabel">Автосохранение заметки при выходе (без кнопки «Сохранить»)</span>
       </label>
-      <label class="settings-toggle">
-        <input id="settings-autosync" type="checkbox">
-        <span data-i18n="autosyncLabel">Автосинхронизация с GitHub по таймеру</span>
-      </label>
+      <div class="settings-toggle-group">
+        <label class="settings-toggle">
+          <input id="settings-autosync" type="checkbox">
+          <span data-i18n="autosyncLabel">Автосинхронизация с GitHub по таймеру</span>
+        </label>
+        <p class="settings-hint" data-i18n="autosyncHint">Все изменения сначала сохраняются локально и не отправляются на GitHub сразу. При включённой автосинхронизации они отправляются автоматически каждые N минут. Кнопка ↻ в списке заметок отправляет их немедленно, счётчик на ней показывает, сколько изменений ждёт отправки.</p>
+        <div class="field autosync-interval-field" id="autosync-interval-field" hidden>
+          <label for="settings-autosync-interval" data-i18n="autosyncIntervalLabel">Интервал (минут)</label>
+          <select id="settings-autosync-interval" class="move-select">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="30">30</option>
+          </select>
+        </div>
+      </div>
       <div id="settings-error" class="error-text" hidden></div>
       <button id="settings-save" type="button" class="btn btn-primary" data-i18n="saveAction">Сохранить</button>
     </div>

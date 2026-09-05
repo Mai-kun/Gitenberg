@@ -1148,6 +1148,9 @@ input, textarea {
 
 #editor-container .editor-preview .callout-body p { margin: 6px 0 0; }
 
+/* Nested callouts sit inside the parent's body */
+#editor-container .editor-preview .callout .callout { margin: 8px 0 0; }
+
 #editor-container .editor-preview .callout-info    { border-left-color: #2196f3; }
 #editor-container .editor-preview .callout-note    { border-left-color: #607d8b; }
 #editor-container .editor-preview .callout-question,

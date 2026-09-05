@@ -189,6 +189,9 @@ const els = {
   settingsAutosync: $('settings-autosync'),
   settingsError: $('settings-error'),
   settingsSave: $('settings-save'),
+  settingsBack: $('btn-settings-back'),
+  settingsAutosyncInterval: $('settings-autosync-interval'),
+  autosyncIntervalField: $('autosync-interval-field'),
 };
 
 const state = {
@@ -1241,11 +1244,19 @@ function isAutosaveEnabled() {
   return localStorage.getItem('gitenberg.autosave') === '1';
 }
 
+function autosyncIntervalMinutes() {
+  const v = Number(localStorage.getItem('gitenberg.autosync.interval'));
+  return Number.isFinite(v) && v > 0 ? v : 5;
+}
+
 async function openSettings() {
   els.settingsError.hidden = true;
   els.settingsToken.value = '';
   els.settingsAutosave.checked = isAutosaveEnabled();
-  els.settingsAutosync.checked = localStorage.getItem('gitenberg.autosync') === '1';
+  const autosync = localStorage.getItem('gitenberg.autosync') === '1';
+  els.settingsAutosync.checked = autosync;
+  els.autosyncIntervalField.hidden = !autosync;
+  els.settingsAutosyncInterval.value = String(autosyncIntervalMinutes());
   showView('settings');
   backButton.show(handleBackNavigation);
   mainButton.hide();
@@ -1271,6 +1282,8 @@ async function saveSettings() {
     await api.saveSettings({ githubToken: token || undefined, repositoryOwner: owner, repositoryName: repo });
     localStorage.setItem('gitenberg.autosave', els.settingsAutosave.checked ? '1' : '0');
     localStorage.setItem('gitenberg.autosync', els.settingsAutosync.checked ? '1' : '0');
+    localStorage.setItem('gitenberg.autosync.interval', els.settingsAutosyncInterval.value);
+    restartAutosyncTimer();
     haptic('success');
     showToast(STRINGS.saved);
     void enterExplorer(state.currentPath);
@@ -1282,6 +1295,10 @@ async function saveSettings() {
 
 els.btnSettings.addEventListener('click', () => void openSettings());
 els.settingsSave.addEventListener('click', () => void saveSettings());
+els.settingsBack.addEventListener('click', () => void enterExplorer(state.currentPath));
+els.settingsAutosync.addEventListener('change', () => {
+  els.autosyncIntervalField.hidden = !els.settingsAutosync.checked;
+});
 
 let syncBadgeTimer = null;
 async function refreshSyncBadge() {
@@ -1293,6 +1310,17 @@ async function refreshSyncBadge() {
   } catch {
     /* status probe is best-effort */
   }
+}
+
+let autosyncTimerId = null;
+function restartAutosyncTimer() {
+  if (autosyncTimerId) clearInterval(autosyncTimerId);
+  if (localStorage.getItem('gitenberg.autosync') !== '1') return;
+  const ms = autosyncIntervalMinutes() * 60_000;
+  autosyncTimerId = setInterval(() => {
+    if (els.syncBadge.hidden) return; // nothing to sync
+    els.btnSync.click();
+  }, ms);
 }
 
 els.btnSync.addEventListener('click', () => {
@@ -1413,12 +1441,7 @@ function initTelegram() {
 
 initTelegram();
 initI18n();
+restartAutosyncTimer();
 void bootstrap();
 void refreshSyncBadge();
-setInterval(() => {
-  void refreshSyncBadge();
-  // Client-driven auto flush when the user enabled the toggle.
-  if (localStorage.getItem('gitenberg.autosync') === '1' && !els.syncBadge.hidden) {
-    els.btnSync.click();
-  }
-}, 120000);
+setInterval(() => void refreshSyncBadge(), 60000);
