@@ -3,48 +3,15 @@
 
 import * as api from './api.js';
 import * as editor from './editor.js';
+import { getVaultIndex, invalidateVaultIndex } from './vault.js';
+import { initI18n, t, getLang, setLang, applyStatic } from './i18n.js';
 
 // ---------------------------------------------------------------------------
-// UI strings (Russian)
+// UI strings (i18n: RU/EN, auto-detected on first run)
 // ---------------------------------------------------------------------------
 
-const STRINGS = {
-  appName: 'Gitenberg',
-  explorerTitle: 'Заметки',
-  rootCrumb: 'Корень',
-  searchPlaceholder: 'Поиск по заметкам…',
-  searchHint: 'Поисковый индекс обновляется примерно раз в час — новые заметки могут появиться не сразу.',
-  loading: 'Загрузка…',
-  emptyFolder: 'Папка пуста. Создайте заметку кнопкой «+».',
-  emptySearch: 'Ничего не найдено.',
-  registerFailed: 'Не удалось подключить GitHub',
-  confirmDelete: (path) => `Удалить заметку «${path}»?\n\nФайл будет удалён из репозитория GitHub.`,
-  confirmDeleteFolder: (name) => `Удалить папку «${name}»?\n\nВсе файлы внутри будут удалены из репозитория GitHub.`,
-  confirmDiscard: 'Есть несохранённые изменения. Выйти без сохранения?',
-  confirmLeaveRegister: 'Выйти без сохранения настроек?',
-  saved: 'Заметка сохранена',
-  deleted: 'Заметка удалена',
-  deletedFolder: 'Папка удалена',
-  deleting: 'Удаление…',
-  infoTitle: 'Свойства',
-  infoTypeFile: 'Файл',
-  infoTypeFolder: 'Папка',
-  infoTypeName: 'Имя',
-  infoTypePath: 'Путь',
-  infoTypeSize: 'Размер',
-  infoTypeContains: 'Внутри',
-  openOnGitHub: 'Открыть на GitHub',
-  folderItemsCount: (n) => `${n} ${plural(n, 'элемент', 'элемента', 'элементов')}`,
-  errorPrefix: 'Ошибка',
-  registerBtnBusy: 'Подключение…',
-  registerBtnIdle: 'Подключить GitHub',
-  saveBtnBusy: 'Сохранение…',
-  saveBtnIdle: 'Сохранить',
-  invalidPath: 'Укажите имя файла (например, notes/idea.md).',
-  tooLarge: 'Файл слишком большой (> 1 МБ) — содержимое недоступно для редактирования.',
-  loadFailed: 'Не удалось загрузить данные',
-  telegramIdInvalid: 'Укажите корректный Telegram ID (положительное число).',
-};
+// Dynamic proxy: every STRINGS.x reads the current language at call time.
+const STRINGS = new Proxy({}, { get: (_, key) => t(key) });
 
 const FOLDER_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>';
 const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>';
@@ -185,19 +152,72 @@ const els = {
   infoTitle: $('info-title'),
   infoFields: $('info-fields'),
   infoGithubLink: $('info-github-link'),
+  infoMove: $('info-move'),
   infoClose: $('info-close'),
   infoBackdrop: $('info-backdrop'),
+  moveModal: $('move-modal'),
+  moveFolder: $('move-folder'),
+  moveNewFolderField: $('move-new-folder-field'),
+  moveNewFolder: $('move-new-folder'),
+  moveName: $('move-name'),
+  moveError: $('move-error'),
+  moveSubmit: $('move-submit'),
+  moveCancel: $('move-cancel'),
+  moveBackdrop: $('move-backdrop'),
+  linkModal: $('link-modal'),
+  linkSearch: $('link-search'),
+  linkResults: $('link-results'),
+  linkUrl: $('link-url'),
+  linkError: $('link-error'),
+  linkInsertUrl: $('link-insert-url'),
+  linkCancel: $('link-cancel'),
+  linkBackdrop: $('link-backdrop'),
+  btnLang: $('btn-lang'),
+  searchModal: $('search-modal'),
+  searchModalResults: $('search-modal-results'),
+  searchModalClear: $('search-modal-clear'),
+  searchBackdrop: $('search-backdrop'),
+  previewBanner: $('preview-banner'),
+  previewBannerEdit: $('preview-banner-edit'),
+  btnSync: $('btn-sync'),
+  syncBadge: $('sync-badge'),
+  btnSettings: $('btn-settings'),
+  settingsOwner: $('settings-owner'),
+  settingsRepo: $('settings-repo'),
+  settingsToken: $('settings-token'),
+  settingsAutosave: $('settings-autosave'),
+  settingsAutosync: $('settings-autosync'),
+  settingsError: $('settings-error'),
+  settingsSave: $('settings-save'),
 };
 
 const state = {
   currentPath: '', // '' = repo root
   searchSeq: 0, // guards against out-of-order search responses
+  infoItem: null, // item shown in the properties sheet
+  infoItemIsDir: false,
+  moveFrom: null, // path being moved/renamed
+  moveOldDir: null,
   editor: {
     mode: 'create', // 'create' | 'edit'
     path: null, // original path in edit mode
     originalContent: null,
   },
 };
+
+// Unique #tags in a markdown text (headings excluded by construction: their #
+// is followed by space or another #).
+function extractTags(text) {
+  const tags = new Set();
+  const re = /(^|[\s>(])#([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_/-]*)/g;
+  for (const match of text.matchAll(re)) {
+    tags.add(match[2]);
+    if (tags.size >= 20) break;
+  }
+  return [...tags];
+}
+
+els.views.settings = $('view-settings'); // extra view routed by showView
 
 // ---------------------------------------------------------------------------
 // Small UI utilities
@@ -305,7 +325,7 @@ els.registerForm.addEventListener('submit', async (event) => {
   const owner = els.regOwner.value.trim();
   const repo = els.regRepo.value.trim();
   if (!token || !owner || !repo) {
-    setError(els.registerError, 'Заполните все поля.');
+    setError(els.registerError, STRINGS.fillAllFields);
     return;
   }
 
@@ -544,12 +564,45 @@ function handleBackNavigation() {
 }
 
 // ---------------------------------------------------------------------------
-// Search
+// Search — results are shown in a popup sheet above the explorer
 // ---------------------------------------------------------------------------
 
 function hideSearchResults() {
   els.searchResults.hidden = true;
   els.searchResults.textContent = '';
+  els.searchModal.hidden = true;
+  els.searchModalResults.textContent = '';
+}
+
+function renderSearchResults(container, results) {
+  container.textContent = '';
+  if (!results.length) {
+    const empty = document.createElement('div');
+    empty.className = 'status-text';
+    empty.textContent = STRINGS.emptySearch;
+    container.append(empty);
+    return;
+  }
+  for (const result of results) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'search-result';
+
+    const path = document.createElement('div');
+    path.className = 'path';
+    path.textContent = result.notePath;
+
+    const snippet = document.createElement('div');
+    snippet.className = 'snippet';
+    snippet.innerHTML = renderSnippet(result.snippet ?? '');
+
+    card.append(path, snippet);
+    card.addEventListener('click', () => {
+      hideSearchResults();
+      openEditor('edit', result.notePath);
+    });
+    container.append(card);
+  }
 }
 
 async function runSearch(query) {
@@ -565,42 +618,17 @@ async function runSearch(query) {
     const results = await api.searchNotes(query);
     if (seq !== state.searchSeq) return;
 
-    els.searchResults.hidden = false;
-    els.searchResults.textContent = '';
-
-    if (!results.length) {
-      const empty = document.createElement('div');
-      empty.className = 'status-text';
-      empty.textContent = STRINGS.emptySearch;
-      els.searchResults.append(empty);
-      return;
-    }
-
-    for (const result of results) {
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'search-result';
-
-      const path = document.createElement('div');
-      path.className = 'path';
-      path.textContent = result.notePath;
-
-      const snippet = document.createElement('div');
-      snippet.className = 'snippet';
-      snippet.innerHTML = renderSnippet(result.snippet ?? '');
-
-      card.append(path, snippet);
-      card.addEventListener('click', () => openEditor('edit', result.notePath));
-      els.searchResults.append(card);
-    }
+    // Show matches in a popup sheet instead of the inline results block.
+    els.searchModal.hidden = false;
+    renderSearchResults(els.searchModalResults, results);
   } catch (error) {
     if (seq !== state.searchSeq) return;
-    els.searchResults.hidden = false;
-    els.searchResults.textContent = '';
+    els.searchModal.hidden = false;
+    els.searchModalResults.textContent = '';
     const failed = document.createElement('div');
     failed.className = 'status-text';
     failed.textContent = error instanceof api.ApiError ? error.message : STRINGS.loadFailed;
-    els.searchResults.append(failed);
+    els.searchModalResults.append(failed);
   }
 }
 
@@ -610,22 +638,90 @@ els.searchInput.addEventListener('input', () => {
   searchTimer = setTimeout(() => void runSearch(els.searchInput.value.trim()), 350);
 });
 
-els.searchClear.addEventListener('click', () => {
+function clearSearch() {
   els.searchInput.value = '';
+  els.searchClear.hidden = true;
   clearTimeout(searchTimer);
-  void runSearch('');
+  hideSearchResults();
   els.searchInput.focus();
+}
+
+els.searchClear.addEventListener('click', clearSearch);
+els.searchModalClear.addEventListener('click', clearSearch);
+els.searchBackdrop.addEventListener('click', hideSearchResults);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !els.searchModal.hidden) hideSearchResults();
+});
+
+// ---------------------------------------------------------------------------
+// Pull-to-refresh: swipe down from the top of the explorer to force-refresh
+// the listing and the vault index (external changes become visible).
+// ---------------------------------------------------------------------------
+
+const pullIndicator = document.createElement('div');
+pullIndicator.className = 'pull-indicator';
+pullIndicator.textContent = '↓';
+document.getElementById('view-explorer').prepend(pullIndicator);
+
+let pullStartY = null;
+let pullActive = false;
+
+document.getElementById('view-explorer').addEventListener('touchstart', (event) => {
+  if (els.views.explorer.hidden) return;
+  if (window.scrollY > 0) return;
+  pullStartY = event.touches[0].clientY;
+  pullActive = true;
+}, { passive: true });
+
+document.getElementById('view-explorer').addEventListener('touchmove', (event) => {
+  if (!pullActive || pullStartY == null) return;
+  const delta = event.touches[0].clientY - pullStartY;
+  if (delta <= 0) {
+    pullIndicator.classList.remove('ready');
+    pullIndicator.style.transform = '';
+    return;
+  }
+  const clamped = Math.min(delta, 90);
+  pullIndicator.style.transform = `translateY(${clamped}px)`;
+  pullIndicator.textContent = delta > 60 ? '↻' : '↓';
+  pullIndicator.classList.toggle('ready', delta > 60);
+}, { passive: true });
+
+document.getElementById('view-explorer').addEventListener('touchend', (event) => {
+  if (!pullActive || pullStartY == null) return;
+  const delta = event.changedTouches[0].clientY - pullStartY;
+  pullActive = false;
+  pullStartY = null;
+  if (delta > 60 && !els.views.explorer.hidden) {
+    pullIndicator.textContent = '…';
+    void (async () => {
+      invalidateVaultIndex();
+      await loadFolder(state.currentPath);
+      pullIndicator.style.transform = '';
+      pullIndicator.classList.remove('ready');
+      pullIndicator.textContent = '↓';
+    })();
+  } else {
+    pullIndicator.style.transform = '';
+    pullIndicator.classList.remove('ready');
+    pullIndicator.textContent = '↓';
+  }
 });
 
 // ---------------------------------------------------------------------------
 // Editor view
 // ---------------------------------------------------------------------------
 
+function updatePreviewBanner() {
+  // Make an active preview state explicit: the note looks read-only.
+  els.previewBanner.hidden = !editor.isPreviewActive();
+}
+
 function openEditor(mode, path) {
   state.editor = { mode, path: path ?? null, originalContent: null };
   els.editorTitle.textContent = mode === 'edit'
     ? path.split('/').pop()
-    : 'Новая заметка';
+    : t('newNoteTitle');
   els.btnEditorDelete.hidden = mode !== 'edit';
   els.notePath.value = mode === 'edit' ? path : suggestNewPath();
   setError(els.editorStatus, '');
@@ -644,6 +740,9 @@ function openEditor(mode, path) {
     editor.setValue('');
     editor.get(); // ensure instance exists before user types
   }
+  // The EasyMDE instance is reused across notes — if the previous session
+  // ended in preview mode, say so loudly instead of a silent read-only note.
+  updatePreviewBanner();
 }
 
 function suggestNewPath() {
@@ -683,6 +782,11 @@ function isEditorDirty() {
 
 async function leaveEditor({ force = false } = {}) {
   if (!force && isEditorDirty()) {
+    // Autosave: silently push the change to the local queue on exit.
+    if (isAutosaveEnabled() && state.editor.mode === 'edit' && editor.getValue().trim() !== '') {
+      await saveCurrentNote();
+      return; // saveCurrentNote already returns to the explorer
+    }
     const ok = await showConfirm(STRINGS.confirmDiscard);
     if (!ok) return;
   }
@@ -710,9 +814,20 @@ async function saveCurrentNote() {
   mainButton.show(STRINGS.saveBtnBusy, () => {}, { color: '#999999' });
 
   try {
-    await api.saveNote(path, content);
-    haptic('success');
-    showToast(STRINGS.saved);
+    const originalPath = state.editor.mode === 'edit' ? state.editor.path : null;
+    if (originalPath && path !== originalPath) {
+      // Path changed in the editor → move (rename): write the new content to
+      // the new location and remove the old file.
+      await api.moveNote(originalPath, path, content);
+      haptic('success');
+      showToast(STRINGS.moved);
+    } else {
+      await api.saveNote(path, content);
+      haptic('success');
+      showToast(STRINGS.saved);
+    }
+    invalidateVaultIndex();
+    void refreshSyncBadge();
     state.editor.originalContent = content;
     state.editor.mode = 'edit';
     state.editor.path = path;
@@ -728,6 +843,8 @@ async function saveCurrentNote() {
 }
 
 function openInfoModal(item, isDir) {
+  state.infoItem = item;
+  state.infoItemIsDir = isDir;
   els.infoTitle.textContent = STRINGS.infoTitle;
   els.infoFields.textContent = '';
 
@@ -739,7 +856,7 @@ function openInfoModal(item, isDir) {
     els.infoFields.append(dt, dd);
   };
 
-  addField('Тип', isDir ? STRINGS.infoTypeFolder : STRINGS.infoTypeFile);
+  addField(t('infoTypeLabel'), isDir ? STRINGS.infoTypeFolder : STRINGS.infoTypeFile);
   addField(STRINGS.infoTypeName, item.name ?? '');
   addField(STRINGS.infoTypePath, item.path ?? '');
   if (isDir) {
@@ -753,6 +870,14 @@ function openInfoModal(item, isDir) {
       .catch(() => {});
   } else {
     addField(STRINGS.infoTypeSize, formatSize(item.size));
+    // Best-effort tag list from the note content; silent on failure.
+    void api.getNoteContent(item.path)
+      .then((data) => {
+        if (els.infoModal.hidden) return;
+        const tags = extractTags(String(data?.content ?? ''));
+        if (tags.length) addField(STRINGS.infoTypeTags, tags.map((x) => `#${x}`).join(' '));
+      })
+      .catch(() => {});
   }
 
   if (item.htmlUrl) {
@@ -761,6 +886,9 @@ function openInfoModal(item, isDir) {
   } else {
     els.infoGithubLink.hidden = true;
   }
+
+  // Moving / renaming works for files and folders (folders move recursively).
+  els.infoMove.hidden = false;
 
   els.infoModal.hidden = false;
 }
@@ -776,6 +904,311 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !els.infoModal.hidden) closeInfoModal();
 });
 
+// ---------------------------------------------------------------------------
+// Move / rename sheet: pick the destination folder from the vault index or
+// type a new one, then edit the name. No guessing whether a folder exists.
+// ---------------------------------------------------------------------------
+
+async function openMoveModal(fromPath, parentDir) {
+  state.moveFrom = fromPath;
+  const isDir = state.infoItemIsDir === true;
+  const oldDir = parentDir !== undefined ? parentDir : fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : '';
+  state.moveOldDir = oldDir;
+
+  setError(els.moveError, '');
+  els.moveName.value = fromPath.split('/').pop();
+  els.moveNewFolder.value = '';
+  els.moveNewFolderField.hidden = true;
+  els.moveFolder.textContent = '';
+  els.moveFolder.disabled = false;
+
+  // Populate the folder select from the vault index: Корень + existing
+  // folders + "New folder…" — the user never has to guess what exists.
+  let folders = [];
+  try {
+    folders = (await getVaultIndex()).folders;
+  } catch {
+    /* keep just the root + new-folder option */
+  }
+  for (const folder of ['', ...folders]) {
+    const option = document.createElement('option');
+    option.value = folder;
+    option.textContent = folder === '' ? STRINGS.moveRootFolder : folder;
+    els.moveFolder.append(option);
+  }
+  const newOption = document.createElement('option');
+  newOption.value = '__new__';
+  newOption.textContent = STRINGS.moveNewFolderOption;
+  els.moveFolder.append(newOption);
+  if (!isDir) {
+    els.moveFolder.value = oldDir;
+  } else {
+    // For folder moves the destination cannot be inside itself; preselect root.
+    els.moveFolder.value = '';
+  }
+
+  els.infoModal.hidden = true;
+  els.moveModal.hidden = false;
+  els.moveName.focus();
+  els.moveName.select();
+}
+
+function closeMoveModal() {
+  els.moveModal.hidden = true;
+  state.moveFrom = null;
+  state.moveOldDir = null;
+}
+
+els.moveFolder.addEventListener('change', () => {
+  els.moveNewFolderField.hidden = els.moveFolder.value !== '__new__';
+  if (!els.moveNewFolderField.hidden) els.moveNewFolder.focus();
+});
+
+async function submitMove() {
+  const fromPath = state.moveFrom;
+  if (!fromPath) return;
+
+  const folderChoice = els.moveFolder.value;
+  let targetDir;
+  if (folderChoice === '__new__') {
+    targetDir = normPath(els.moveNewFolder.value);
+    if (!targetDir || targetDir.endsWith('/')) {
+      setError(els.moveError, STRINGS.invalidName);
+      return;
+    }
+  } else {
+    targetDir = folderChoice;
+  }
+
+  const rawName = els.moveName.value.trim();
+  if (!rawName || rawName.includes('/') || rawName === '.' || rawName === '..') {
+    setError(els.moveError, STRINGS.invalidName);
+    return;
+  }
+  // Keep the extension when the user typed the name without it (files only).
+  const oldName = fromPath.split('/').pop();
+  const name = !/\.[^/]+$/.test(rawName) && /\.[^/]+$/.test(oldName) ? `${rawName}${oldName.match(/\.[^/]+$/)[0]}` : rawName;
+
+  const toPath = targetDir ? `${targetDir}/${name}` : name;
+  if (normPath(toPath) === normPath(fromPath)) {
+    closeMoveModal();
+    return;
+  }
+
+  try {
+    await api.moveNote(fromPath, toPath);
+    haptic('success');
+    showToast(STRINGS.moved);
+    closeMoveModal();
+    invalidateVaultIndex();
+    void refreshSyncBadge();
+    // Keep the editor in sync when the open note was moved from the sheet.
+    if (state.editor.mode === 'edit' && state.editor.path === fromPath) {
+      state.editor.path = toPath;
+      els.notePath.value = toPath;
+      els.editorTitle.textContent = toPath.split('/').pop();
+    }
+    if (!els.views.editor.hidden) {
+      await enterExplorer(state.currentPath);
+    } else {
+      await loadFolder(state.currentPath);
+    }
+  } catch (error) {
+    setError(els.moveError, error instanceof Error && error.message ? error.message : STRINGS.loadFailed);
+    haptic('error');
+  }
+}
+
+els.infoMove.addEventListener('click', () => {
+  if (state.infoItem) openMoveModal(state.infoItem.path);
+});
+els.moveSubmit.addEventListener('click', () => void submitMove());
+els.moveCancel.addEventListener('click', closeMoveModal);
+els.moveBackdrop.addEventListener('click', closeMoveModal);
+els.moveName.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    void submitMove();
+  }
+});
+els.moveNewFolder.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    void submitMove();
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !els.moveModal.hidden) closeMoveModal();
+});
+
+// ---------------------------------------------------------------------------
+// Link picker: insert [[note]] from a searchable list, or an external URL.
+// Opened from the editor toolbar (the old "link" button's useless
+// "[ ](https://)" template is gone).
+// ---------------------------------------------------------------------------
+
+let linkPickerSeq = 0;
+
+async function openLinkPicker() {
+  state.linkTargetDir = state.currentPath;
+  els.linkUrl.value = '';
+  setError(els.linkError, '');
+  els.linkSearch.value = '';
+  els.linkResults.textContent = '';
+  els.linkModal.hidden = false;
+  els.linkSearch.focus();
+
+  const seq = ++linkPickerSeq;
+  try {
+    const { notes } = await getVaultIndex();
+    if (seq !== linkPickerSeq || els.linkModal.hidden) return;
+    renderLinkResults(notes, '');
+  } catch {
+    if (seq === linkPickerSeq && !els.linkModal.hidden) {
+      els.linkResults.textContent = STRINGS.linkPickerNoNotes;
+    }
+  }
+}
+
+function renderLinkResults(notes, query) {
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? notes.filter((n) => n.path.toLowerCase().includes(q))
+    : notes;
+  els.linkResults.textContent = '';
+
+  if (!matches.length) {
+    const empty = document.createElement('div');
+    empty.className = 'link-empty';
+    empty.textContent = STRINGS.linkPickerNoNotes;
+    els.linkResults.append(empty);
+    return;
+  }
+  for (const note of matches.slice(0, 50)) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'link-result';
+    const name = document.createElement('span');
+    name.className = 'link-result-name';
+    name.textContent = note.name;
+    const dir = document.createElement('span');
+    dir.className = 'link-result-dir';
+    dir.textContent = note.dir || STRINGS.moveRootFolder;
+    btn.append(name, dir);
+    btn.addEventListener('click', () => {
+      const target = note.path.replace(/\.md$/i, '');
+      editor.insertAtCursor(`[[${target}]]`);
+      closeLinkPicker();
+    });
+    els.linkResults.append(btn);
+  }
+}
+
+function closeLinkPicker() {
+  els.linkModal.hidden = true;
+}
+
+els.linkSearch.addEventListener('input', async () => {
+  const seq = ++linkPickerSeq;
+  try {
+    const { notes } = await getVaultIndex();
+    if (seq === linkPickerSeq && !els.linkModal.hidden) renderLinkResults(notes, els.linkSearch.value);
+  } catch {
+    /* keep current list */
+  }
+});
+
+els.linkInsertUrl.addEventListener('click', () => {
+  const url = els.linkUrl.value.trim();
+  if (!/^(https?:\/\/|mailto:)/i.test(url)) {
+    setError(els.linkError, STRINGS.linkInvalid);
+    return;
+  }
+  const selected = editor.getSelection().trim();
+  editor.insertAtCursor(`[${selected || url}](${url})`);
+  closeLinkPicker();
+});
+
+els.linkCancel.addEventListener('click', closeLinkPicker);
+els.linkBackdrop.addEventListener('click', closeLinkPicker);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !els.linkModal.hidden) closeLinkPicker();
+});
+document.addEventListener('link-picker-open', () => {
+  void openLinkPicker();
+});
+
+// Tag chips rendered in the preview (#tag) run a notes search on click.
+document.addEventListener('tag-click', async (event) => {
+  const tag = String(event.detail?.tag || '').trim();
+  if (!tag) return;
+  mainButton.hide();
+  showView('explorer');
+  els.searchInput.value = `#${tag}`;
+  await runSearch(`#${tag}`);
+});
+
+// Wikilinks rendered in the preview ([[note]] / [[note|label]]) open the
+// target note in the editor. Resolution order: current folder, repo root,
+// then a breadth-first search across the whole vault (like Obsidian).
+document.addEventListener('wiki-open', async (event) => {
+  const raw = normPath(String(event.detail?.target || ''));
+  if (!raw) return;
+  const folder = state.currentPath;
+  const candidates = raw.includes('/')
+    ? [raw, `${raw}.md`]
+    : [...(folder ? [`${folder}/${raw}`, `${folder}/${raw}.md`] : []), raw, `${raw}.md`];
+
+  for (const candidate of candidates) {
+    try {
+      await api.getNoteContent(candidate);
+      openEditor('edit', candidate);
+      return;
+    } catch (error) {
+      if (error instanceof api.ApiError && error.status !== 404) {
+        showErrorToast(error);
+        return;
+      }
+    }
+  }
+
+  const vaultPath = await searchVaultForNote(raw);
+  if (vaultPath) {
+    openEditor('edit', vaultPath);
+  } else {
+    showToast(STRINGS.noteNotFound(raw));
+  }
+});
+
+// Breadth-first lookup of a note by name across the repository. Folder
+// listings are cached server-side, so repeated searches are cheap.
+const VAULT_SEARCH_BUDGET = 40;
+async function searchVaultForNote(raw) {
+  const wanted = new Set([raw.toLowerCase(), `${raw}.md`.toLowerCase()]);
+  const queue = [''];
+  let budget = VAULT_SEARCH_BUDGET;
+
+  while (queue.length && budget > 0) {
+    budget -= 1;
+    const dir = queue.shift();
+    let items;
+    try {
+      items = await api.listNotes(dir || undefined);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      if ((item.type || '').toLowerCase() === 'dir') {
+        queue.push(item.path);
+      } else if (wanted.has(String(item.path).toLowerCase()) || wanted.has(String(item.name).toLowerCase())) {
+        return item.path;
+      }
+    }
+  }
+  return null;
+}
+
 async function confirmAndDeleteItem(path, displayName, isDir) {
   const message = isDir
     ? STRINGS.confirmDeleteFolder(displayName ?? path)
@@ -785,8 +1218,10 @@ async function confirmAndDeleteItem(path, displayName, isDir) {
   try {
     if (isDir) showToast(STRINGS.deleting, 10000);
     await api.deleteNote(path);
+    invalidateVaultIndex();
     haptic('success');
     showToast(isDir ? STRINGS.deletedFolder : STRINGS.deleted);
+    void refreshSyncBadge();
     if (!els.views.editor.hidden) {
       mainButton.hide();
       await enterExplorer(state.currentPath);
@@ -799,8 +1234,109 @@ async function confirmAndDeleteItem(path, displayName, isDir) {
 }
 
 // ---------------------------------------------------------------------------
+// Settings (token / repository / autosave) & manual sync
+// ---------------------------------------------------------------------------
+
+function isAutosaveEnabled() {
+  return localStorage.getItem('gitenberg.autosave') === '1';
+}
+
+async function openSettings() {
+  els.settingsError.hidden = true;
+  els.settingsToken.value = '';
+  els.settingsAutosave.checked = isAutosaveEnabled();
+  els.settingsAutosync.checked = localStorage.getItem('gitenberg.autosync') === '1';
+  showView('settings');
+  backButton.show(handleBackNavigation);
+  mainButton.hide();
+  try {
+    const settings = await api.getSettings();
+    els.settingsOwner.value = settings.repositoryOwner ?? '';
+    els.settingsRepo.value = settings.repositoryName ?? '';
+  } catch (error) {
+    setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
+  }
+}
+
+async function saveSettings() {
+  setError(els.settingsError, '');
+  const owner = els.settingsOwner.value.trim();
+  const repo = els.settingsRepo.value.trim();
+  const token = els.settingsToken.value.trim();
+  if (!owner || !repo) {
+    setError(els.settingsError, STRINGS.fillAllFields);
+    return;
+  }
+  try {
+    await api.saveSettings({ githubToken: token || undefined, repositoryOwner: owner, repositoryName: repo });
+    localStorage.setItem('gitenberg.autosave', els.settingsAutosave.checked ? '1' : '0');
+    localStorage.setItem('gitenberg.autosync', els.settingsAutosync.checked ? '1' : '0');
+    haptic('success');
+    showToast(STRINGS.saved);
+    void enterExplorer(state.currentPath);
+  } catch (error) {
+    setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
+    haptic('error');
+  }
+}
+
+els.btnSettings.addEventListener('click', () => void openSettings());
+els.settingsSave.addEventListener('click', () => void saveSettings());
+
+let syncBadgeTimer = null;
+async function refreshSyncBadge() {
+  try {
+    const { pending } = await api.syncStatus();
+    els.syncBadge.hidden = pending === 0;
+    els.syncBadge.textContent = String(pending);
+    els.syncBadge.title = t('syncPendingHint');
+  } catch {
+    /* status probe is best-effort */
+  }
+}
+
+els.btnSync.addEventListener('click', () => {
+  els.syncBadge.hidden = true;
+  showToast(STRINGS.syncing, 8000);
+  void (async () => {
+    try {
+      const { applied, remaining } = await api.syncNow();
+      haptic('success');
+      showToast(remaining > 0
+        ? `${t('syncDonePartial')(applied, remaining)}`
+        : t('syncDone')(applied));
+      invalidateVaultIndex();
+      if (!els.views.explorer.hidden) await loadFolder(state.currentPath);
+    } catch (error) {
+      showErrorToast(error);
+    } finally {
+      void refreshSyncBadge();
+    }
+  })();
+});
+
+// ---------------------------------------------------------------------------
 // Wiring & startup
 // ---------------------------------------------------------------------------
+
+// Language toggle (RU ⇄ EN); the initial language was auto-detected in i18n.
+els.btnLang.addEventListener('click', () => {
+  setLang(getLang() === 'ru' ? 'en' : 'ru');
+  els.btnLang.textContent = getLang() === 'ru' ? 'EN' : 'RU';
+  // Re-render dynamic texts of the visible view.
+  if (!els.views.explorer.hidden) {
+    renderBreadcrumbs(state.currentPath);
+    if (els.notesList.querySelector('.note-row')) void loadFolder(state.currentPath);
+  }
+});
+els.btnLang.textContent = getLang() === 'ru' ? 'EN' : 'RU';
+document.addEventListener('language-changed', () => {
+  els.explorerTitle.textContent = STRINGS.explorerTitle;
+  els.btnLang.textContent = getLang() === 'ru' ? 'EN' : 'RU';
+  if (!els.views.editor.hidden) {
+    mainButton.show(STRINGS.saveBtnIdle, () => void saveCurrentNote());
+  }
+});
 
 els.btnCreateNote.addEventListener('click', () => {
   haptic('select');
@@ -812,6 +1348,13 @@ els.fabCreate.addEventListener('click', () => {
 });
 
 els.btnEditorBack.addEventListener('click', () => void leaveEditor());
+els.previewBannerEdit.addEventListener('click', () => {
+  editor.exitPreview();
+  updatePreviewBanner();
+});
+document.addEventListener('preview-toggled', (event) => {
+  els.previewBanner.hidden = !event.detail?.active;
+});
 els.btnEditorDelete.addEventListener('click', () => {
   if (state.editor.mode === 'edit' && state.editor.path) {
     void confirmAndDeleteItem(state.editor.path, state.editor.path.split('/').pop(), false);
@@ -849,7 +1392,7 @@ async function bootstrap() {
     }
     if (error instanceof api.ApiError && error.status === 400 && /Telegram ID/.test(error.message)) {
       // Dev mode without a valid test id — stay on explorer with a hint.
-      setStatus(els.devBar.hidden ? STRINGS.loadFailed : 'Укажите тестовый Telegram ID в панели сверху.');
+      setStatus(els.devBar.hidden ? STRINGS.loadFailed : t('devBarHint'));
       return;
     }
     showView('register');
@@ -869,4 +1412,13 @@ function initTelegram() {
 }
 
 initTelegram();
+initI18n();
 void bootstrap();
+void refreshSyncBadge();
+setInterval(() => {
+  void refreshSyncBadge();
+  // Client-driven auto flush when the user enabled the toggle.
+  if (localStorage.getItem('gitenberg.autosync') === '1' && !els.syncBadge.hidden) {
+    els.btnSync.click();
+  }
+}, 120000);

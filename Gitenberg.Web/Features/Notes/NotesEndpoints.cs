@@ -1,5 +1,6 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
+using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
@@ -35,6 +36,10 @@ public static class NotesEndpoints
              .WithName("CreateOrUpdateNote")
              .WithSummary("Create or update a note");
 
+        group.MapPost("/move", MoveNote)
+             .WithName("MoveNote")
+             .WithSummary("Move (rename) a note to a new path");
+
         group.MapDelete("/", DeleteNote)
              .WithName("DeleteNote")
              .WithSummary("Delete a note");
@@ -48,6 +53,7 @@ public static class NotesEndpoints
         ITokenEncryptionService encryptionService,
         IGitHubService gitHubService,
         IMemoryCache memoryCache,
+        PendingSyncService pendingSync,
         HttpContext? httpContext = null
     )
     {
@@ -63,7 +69,7 @@ public static class NotesEndpoints
             );
         }
 
-        return await GetNotesCachedAsync(telegramId.Value, path, dbContext, encryptionService, gitHubService, memoryCache);
+        return await GetNotesCachedAsync(telegramId.Value, path, dbContext, encryptionService, gitHubService, memoryCache, pendingSync);
     }
 
     public static async Task<IResult> GetNoteContent(
@@ -73,6 +79,7 @@ public static class NotesEndpoints
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         IGitHubService gitHubService,
+        PendingSyncService pendingSync,
         HttpContext? httpContext = null
     )
     {
@@ -107,7 +114,21 @@ public static class NotesEndpoints
         var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
         var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
-        var content = await gitHubService.GetNoteContentAsync(context, path);
+        // Pending local changes override the remote file: a queued save wins,
+        // a queued delete/move makes the path read as missing.
+        var ops = await pendingSync.GetOpsAsync(telegramId.Value);
+        var overlay = pendingSync.GetContentOverlay(ops, path);
+        if (overlay.Deleted)
+        {
+            return Results.NotFound(new { Error = $"Note at '{path}' does not exist (pending local change)." });
+        }
+        if (overlay.Found && overlay.Content != null)
+        {
+            return Results.Ok(new { Path = path, Content = overlay.Content });
+        }
+
+        var sourcePath = overlay.FallbackFromPath ?? path;
+        var content = await gitHubService.GetNoteContentAsync(context, sourcePath);
         return Results.Ok(new { Path = path, Content = content });
     }
 
@@ -116,8 +137,7 @@ public static class NotesEndpoints
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
-        ITokenEncryptionService encryptionService,
-        IGitHubService gitHubService,
+        PendingSyncService pendingSync,
         IMemoryCache memoryCache,
         HttpContext? httpContext = null
     )
@@ -145,28 +165,16 @@ public static class NotesEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
-        {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
-        }
-
-        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
-
+        // Local-first: the change is queued and pushed to GitHub by the sync
+        // timer or the manual flush button.
         var commitMessage = string.IsNullOrWhiteSpace(request.CommitMessage)
             ? $"Update note: {request.Path}"
             : request.CommitMessage;
 
-        await gitHubService.CreateOrUpdateNoteAsync(
-            context,
-            request.Path,
-            request.Content ?? string.Empty,
-            commitMessage
-        );
-
+        await pendingSync.EnqueueAsync(telegramId.Value, "save", request.Path, request.Path, request.Content ?? string.Empty);
         BustUserCache(memoryCache, telegramId.Value);
 
-        return Results.Ok(new { Message = $"Note at '{request.Path}' successfully created or updated." });
+        return Results.Ok(new { Message = $"Note at '{request.Path}' saved locally; it will be synced to GitHub.", Pending = true });
     }
 
     public static async Task<IResult> DeleteNote(
@@ -175,8 +183,7 @@ public static class NotesEndpoints
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
-        ITokenEncryptionService encryptionService,
-        IGitHubService gitHubService,
+        PendingSyncService pendingSync,
         IMemoryCache memoryCache,
         HttpContext? httpContext = null
     )
@@ -204,23 +211,62 @@ public static class NotesEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
-        {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
-        }
-
-        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
-
         var commit = string.IsNullOrWhiteSpace(commitMessage)
             ? $"Delete note: {path}"
             : commitMessage;
 
-        await gitHubService.DeleteNoteAsync(context, path, commit);
-
+        await pendingSync.EnqueueAsync(telegramId.Value, "delete", path);
         BustUserCache(memoryCache, telegramId.Value);
 
-        return Results.Ok(new { Message = $"Note at '{path}' successfully deleted." });
+        return Results.Ok(new { Message = $"Note at '{path}' deleted locally; it will be synced to GitHub.", Pending = true });
+    }
+
+    public static async Task<IResult> MoveNote(
+        [FromBody] MoveNoteRequest? request,
+        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
+        [FromQuery(Name = "telegramId")] long? queryTelegramId,
+        AppDbContext dbContext,
+        PendingSyncService pendingSync,
+        IMemoryCache memoryCache,
+        HttpContext? httpContext = null
+    )
+    {
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
+        if (telegramId == null)
+        {
+            return Results.BadRequest(
+                new
+                {
+                    Error =
+                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                }
+            );
+        }
+
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.FromPath)
+            || string.IsNullOrWhiteSpace(request.ToPath))
+        {
+            return Results.BadRequest(new { Error = "Both 'FromPath' and 'ToPath' are required." });
+        }
+
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        if (user == null)
+        {
+            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+        }
+
+        // Local validation of obvious errors (paths, folder-into-itself).
+        if (!string.Equals(request.FromPath.Trim('/'), request.ToPath.Trim('/'), StringComparison.OrdinalIgnoreCase)
+            && request.ToPath.Trim('/').StartsWith(request.FromPath.Trim('/') + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.BadRequest(new { Error = $"Cannot move '{request.FromPath}' inside itself." });
+        }
+
+        await pendingSync.EnqueueAsync(telegramId.Value, "move", request.FromPath, request.ToPath, request.Content);
+        BustUserCache(memoryCache, telegramId.Value);
+
+        return Results.Ok(new { Message = $"Move of '{request.FromPath}' to '{request.ToPath}' queued; it will be synced to GitHub.", Pending = true });
     }
 
     private static void BustUserCache(IMemoryCache memoryCache, long telegramId)
@@ -240,7 +286,8 @@ public static class NotesEndpoints
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         IGitHubService gitHubService,
-        IMemoryCache memoryCache
+        IMemoryCache memoryCache,
+        PendingSyncService pendingSync
     )
     {
         var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
@@ -271,7 +318,14 @@ public static class NotesEndpoints
         var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
         var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
-        var contents = await gitHubService.GetNotesAsync(context, path);
+        // Pending local changes are overlaid on the remote listing, and the
+        // listing itself may need to be read from the pre-move folder path.
+        var (effectivePath, contents) = await pendingSync.ApplyListOverlayAsync(
+            telegramId,
+            path,
+            async (p) => await gitHubService.GetNotesAsync(context, p)
+        );
+
         var notes = contents.Select(c => (object)new
         {
             c.Name,

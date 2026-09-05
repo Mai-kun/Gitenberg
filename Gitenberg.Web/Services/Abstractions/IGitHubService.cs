@@ -16,4 +16,12 @@ public interface IGitHubService
     );
 
     public Task DeleteNoteAsync(GitHubRepositoryContext context, string path, string commitMessage);
+
+    public Task MoveNoteAsync(
+        GitHubRepositoryContext context,
+        string fromPath,
+        string toPath,
+        string? content,
+        string commitMessage
+    );
 }

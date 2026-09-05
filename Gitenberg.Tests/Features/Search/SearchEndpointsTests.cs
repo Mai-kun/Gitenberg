@@ -3,6 +3,8 @@ using FluentAssertions;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Services;
+using Gitenberg.Tests.Mocks;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
@@ -57,6 +59,11 @@ public class SearchEndpointsTests
         );
     }
 
+    private NoteIndexer CreateIndexer(AppDbContext db)
+    {
+        return new NoteIndexer(db, new MockGitHubService(), _encryptionService, NullLogger<NoteIndexer>.Instance);
+    }
+
     private static List<NoteSearchResult> GetResultsValue(IResult result)
     {
         var valueResult = result as IValueHttpResult;
@@ -71,7 +78,7 @@ public class SearchEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", null, null, db);
+        var result = await SearchEndpoints.SearchNotes("kernel", null, null, db, CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -87,7 +94,7 @@ public class SearchEndpointsTests
         await SeedUserAsync(db, 12345);
 
         // Act
-        var result = await SearchEndpoints.SearchNotes(null, 12345, null, db);
+        var result = await SearchEndpoints.SearchNotes(null, 12345, null, db, CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -103,7 +110,7 @@ public class SearchEndpointsTests
         await SeedUserAsync(db, 12345);
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("   ", 12345, null, db);
+        var result = await SearchEndpoints.SearchNotes("   ", 12345, null, db, CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -118,7 +125,7 @@ public class SearchEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db);
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -140,7 +147,7 @@ public class SearchEndpointsTests
         );
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db);
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -164,7 +171,7 @@ public class SearchEndpointsTests
         await InsertFtsRowAsync(db, 12345, "notes/os-basics.md", "A note about completely different topics.");
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db);
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -184,7 +191,7 @@ public class SearchEndpointsTests
         await InsertFtsRowAsync(db, 67890, "notes/other-user.md", "Another note about kernel scheduling.");
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db);
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -197,19 +204,18 @@ public class SearchEndpointsTests
     }
 
     [Fact]
-    public async Task SearchNotes_ShouldReturnBadRequest_WhenFtsQuerySyntaxIsInvalid()
+    public async Task SearchNotes_ShouldSanitizeQuotes_AndReturnEmptyList()
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
         await SeedUserAsync(db, 12345);
         await InsertFtsRowAsync(db, 12345, "notes/os-basics.md", "Some content.");
 
-        // Act - an unbalanced quote is invalid FTS5 MATCH syntax.
-        var result = await SearchEndpoints.SearchNotes("\"", 12345, null, db);
+        // Act - an unbalanced quote used to be invalid FTS5 MATCH syntax;
+        // the endpoint now sanitizes it away, so the search succeeds with no matches.
+        var result = await SearchEndpoints.SearchNotes("\"", 12345, null, db, CreateIndexer(db));
 
         // Assert
-        var statusCodeResult = result as IStatusCodeHttpResult;
-        statusCodeResult.Should().NotBeNull();
-        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        GetResultsValue(result).Should().BeEmpty();
     }
 }

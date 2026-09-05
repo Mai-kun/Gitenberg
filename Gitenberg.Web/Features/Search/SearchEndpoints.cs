@@ -25,6 +25,7 @@ public static class SearchEndpoints
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
+        NoteIndexer indexer,
         HttpContext? httpContext = null
     )
     {
@@ -53,6 +54,29 @@ public static class SearchEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
+        // Refresh the index right before searching: the incremental sync is
+        // cheap when nothing changed and guarantees fresh results (new notes
+        // from external sources included).
+        try
+        {
+            await indexer.SynchronizeUserByIdAsync(telegramId.Value);
+        }
+        catch (Exception ex)
+        {
+            // A failed refresh must not break the search — query the current index.
+            Console.Error.WriteLine($"Search index refresh failed for user {telegramId}: {ex.Message}");
+        }
+
+        // Build a safe FTS5 MATCH expression: each whitespace-separated term
+        // becomes a quoted prefix term ("term"*). This avoids syntax errors
+        // from user input (quotes, #tags, punctuation) and enables partial
+        // matches for titles and tags.
+        var matchExpression = BuildMatchExpression(query);
+        if (string.IsNullOrEmpty(matchExpression))
+        {
+            return Results.Ok(new List<NoteSearchResult>());
+        }
+
         List<NoteSearchResult> results;
         try
         {
@@ -63,7 +87,7 @@ public static class SearchEndpoints
                        snippet(NoteSearchFts, 2, '<b>', '</b>', '...', 10) AS Snippet
                 FROM NoteSearchFts
                 WHERE TelegramUserId = {telegramId.Value.ToString(CultureInfo.InvariantCulture)}
-                  AND NoteSearchFts MATCH {query}
+                  AND NoteSearchFts MATCH {matchExpression}
                 ORDER BY rank
                 LIMIT 50
                 """
@@ -76,6 +100,18 @@ public static class SearchEndpoints
         }
 
         return Results.Ok(results);
+    }
+
+    private static string BuildMatchExpression(string rawQuery)
+    {
+        var terms = rawQuery
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(term => term.Replace("\"", string.Empty).Trim())
+            .Where(term => term.Length > 0)
+            .Select(term => $"\"{term}\"*")
+            .Take(8)
+            .ToList();
+        return string.Join(' ', terms);
     }
 }
 

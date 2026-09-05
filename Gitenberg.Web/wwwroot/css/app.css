@@ -208,9 +208,19 @@ input, textarea {
 .explorer-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* flex:1 on the title keeps the right-side buttons anchored when the
+     translated title changes length (Заметки ↔ Notes). */
+  gap: 6px;
   min-height: var(--header-h);
   padding: 8px var(--pad) 4px;
+}
+
+.explorer-header h1 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-btn {
@@ -584,6 +594,28 @@ input, textarea {
 
 #editor-container .CodeMirror-placeholder { color: var(--tg-hint); }
 
+/* EasyMDE ships growing font sizes for in-editor headings (.cm-header-1…6);
+   keep the editing surface typographically uniform — size changes belong to
+   the preview, not the source view. */
+#editor-container .CodeMirror .cm-header {
+  font-size: inherit;
+  line-height: inherit;
+  margin-bottom: 0;
+}
+
+/* Obsidian-style extensions in the preview */
+#editor-container .editor-preview mark {
+  background: rgba(255, 213, 0, 0.35);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+#editor-container .editor-preview a.wiki-link {
+  color: var(--tg-link);
+  text-decoration: underline;
+}
+
 /* ==========================================================================
    Info sheet (folder / file properties)
    ========================================================================== */
@@ -653,6 +685,342 @@ input, textarea {
   font-size: 14px;
 }
 
+/* Secondary buttons inside sheets stack vertically */
+.info-sheet .btn { margin-bottom: 10px; }
+.info-sheet .btn:last-child { margin-bottom: 0; }
+
+.md-help-hint {
+  font-size: 13px;
+  color: var(--tg-hint);
+  margin: 0 0 12px;
+}
+
+.md-help-list { font-size: 13px; }
+.md-help-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--tg-secondary);
+  padding: 1px 5px;
+  border-radius: 5px;
+  word-break: break-all;
+}
+
+/* ==========================================================================
+   Preview banner, search popup, pull-to-refresh
+   ========================================================================== */
+
+.preview-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 var(--pad) 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 213, 0, 0.18);
+  border: 1px solid rgba(255, 213, 0, 0.45);
+  font-size: 13px;
+}
+
+.preview-banner-text { flex: 1; min-width: 0; }
+
+.preview-banner button {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.search-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.search-sheet-header h2 { margin: 0; font-size: 17px; }
+
+#search-modal-results { max-height: 60vh; overflow-y: auto; }
+
+/* Kanban interactivity */
+#editor-container .editor-preview .kanban-col.drag-over {
+  outline: 2px dashed var(--tg-button);
+  outline-offset: -2px;
+}
+
+#editor-container .editor-preview .kanban-card {
+  cursor: grab;
+}
+
+#editor-container .editor-preview .kanban-card.is-dragging {
+  opacity: 0.45;
+}
+
+#editor-container .editor-preview .kanban-info {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--tg-secondary);
+  color: var(--tg-link);
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#editor-container .editor-preview .kanban-add {
+  width: 100%;
+  padding: 7px 0;
+  border-radius: 8px;
+  color: var(--tg-hint);
+  font-size: 13px;
+  text-align: center;
+}
+
+#editor-container .editor-preview .kanban-add:active {
+  background: var(--tg-section-sep);
+  color: var(--tg-text);
+}
+
+.kanban-done-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kanban-done-field label { margin-bottom: 0; }
+.kanban-done-field input[type="checkbox"] { width: 20px; height: 20px; }
+
+.field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--tg-secondary);
+  outline: none;
+  resize: vertical;
+}
+
+.field textarea:focus { border-color: var(--tg-button); }
+
+/* Pull-to-refresh indicator */
+.pull-indicator {
+  position: absolute;
+  top: -44px;
+  left: 50%;
+  margin-left: -16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--tg-secondary);
+  color: var(--tg-hint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  opacity: 0;
+  z-index: 60;
+}
+
+#view-explorer {
+  position: relative;
+  overflow-y: visible;
+}
+
+.pull-indicator[style*="translateY"] { opacity: 1; }
+
+/* ==========================================================================
+   Language toggle, move sheet, link picker
+   ========================================================================== */
+
+.lang-btn {
+  width: auto;
+  min-width: 38px;
+  padding: 0 10px;
+  border-radius: 16px;
+  background: var(--tg-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.move-select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--tg-secondary);
+  color: var(--tg-text);
+  font: inherit;
+  outline: none;
+}
+
+.move-select:focus { border-color: var(--tg-button); }
+
+.link-results {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+}
+
+.link-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--tg-section-sep);
+}
+
+.link-result:last-child { border-bottom: none; }
+.link-result:active { background: var(--tg-secondary); }
+
+.link-result-name {
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-result-dir {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--tg-hint);
+}
+
+.link-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--tg-hint);
+  font-size: 14px;
+}
+
+/* ==========================================================================
+   Markdown preview extensions: tags, dataview, kanban
+   ========================================================================== */
+
+#editor-container .editor-preview a.md-tag,
+#editor-container .editor-preview a.md-tag:visited {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--tg-secondary);
+  color: var(--tg-link);
+  font-size: 0.9em;
+  text-decoration: none;
+}
+
+#editor-container .editor-preview .dv-field {
+  display: block;
+  padding: 2px 0;
+}
+
+#editor-container .editor-preview .dv-key {
+  color: var(--tg-hint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+#editor-container .editor-preview .dataview-block {
+  padding: 8px 12px;
+  border: 1px dashed var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  color: var(--tg-hint);
+  font-size: 14px;
+  margin: 8px 0;
+}
+
+#editor-container .editor-preview .dv-list {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+#editor-container .editor-preview .dv-table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 14px;
+  width: 100%;
+}
+
+#editor-container .editor-preview .dv-table th,
+#editor-container .editor-preview .dv-table td {
+  border: 1px solid var(--tg-section-sep);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+#editor-container .editor-preview .dv-table th {
+  background: var(--tg-secondary);
+}
+
+#editor-container .editor-preview .kanban {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 8px 0;
+}
+
+#editor-container .editor-preview .kanban-col {
+  flex: 0 0 200px;
+  background: var(--tg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+}
+
+#editor-container .editor-preview .kanban-col-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+#editor-container .editor-preview .kanban-card {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  background: var(--tg-bg);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+#editor-container .editor-preview .kanban-card.is-done span:last-child {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+#editor-container .editor-preview .kanban-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--tg-hint);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--tg-button-text);
+  margin-top: 1px;
+}
+
+#editor-container .editor-preview .kanban-check.done {
+  background: var(--tg-button);
+  border-color: var(--tg-button);
+}
+
 /* ==========================================================================
    Toast
    ========================================================================== */
@@ -696,4 +1064,115 @@ input, textarea {
     margin-left: auto;
     margin-right: auto;
   }
+}
+
+/* ==========================================================================
+   Settings, sync badge, front-matter, callouts, code highlighting
+   ========================================================================== */
+
+.settings-body {
+  padding: 4px var(--pad) 96px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  font-size: 14px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--tg-section-sep);
+  margin-bottom: 12px;
+}
+
+.settings-toggle input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sync-badge {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--tg-destructive);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+#btn-sync { position: relative; }
+
+/* YAML front-matter metadata card */
+#editor-container .editor-preview .front-matter {
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--tg-secondary);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+#editor-container .editor-preview .fm-row { padding: 2px 0; }
+
+#editor-container .editor-preview .fm-key {
+  color: var(--tg-hint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Obsidian callouts */
+#editor-container .editor-preview .callout {
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--tg-link);
+  background: var(--tg-secondary);
+  padding: 10px 12px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+#editor-container .editor-preview .callout-title {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#editor-container .editor-preview .callout-body p { margin: 6px 0 0; }
+
+#editor-container .editor-preview .callout-info    { border-left-color: #2196f3; }
+#editor-container .editor-preview .callout-note    { border-left-color: #607d8b; }
+#editor-container .editor-preview .callout-question,
+#editor-container .editor-preview .callout-help,
+#editor-container .editor-preview .callout-faq     { border-left-color: #e91e63; }
+#editor-container .editor-preview .callout-warning,
+#editor-container .editor-preview .callout-caution,
+#editor-container .editor-preview .callout-attention { border-left-color: #ff9800; }
+#editor-container .editor-preview .callout-danger,
+#editor-container .editor-preview .callout-error   { border-left-color: #f44336; }
+#editor-container .editor-preview .callout-tip,
+#editor-container .editor-preview .callout-hint,
+#editor-container .editor-preview .callout-important { border-left-color: #00bcd4; }
+#editor-container .editor-preview .callout-success,
+#editor-container .editor-preview .callout-check,
+#editor-container .editor-preview .callout-done    { border-left-color: #4caf50; }
+#editor-container .editor-preview .callout-example { border-left-color: #9c27b0; }
+#editor-container .editor-preview .callout-quote,
+#editor-container .editor-preview .callout-cite    { border-left-color: #9e9e9e; }
+
+/* Code blocks in the preview (hljs theme background is overridden) */
+#editor-container .editor-preview pre code.hljs {
+  background: var(--tg-secondary);
+  color: var(--tg-text);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
 }

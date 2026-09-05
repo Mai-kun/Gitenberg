@@ -31,6 +31,19 @@ public class NoteIndexer(
         }
     }
 
+    /// <summary>
+    /// Incremental re-index of a single user's notes. Cheap when nothing
+    /// changed (one listing; only notes with a new SHA are downloaded), so
+    /// search endpoints can call it right before querying to guarantee
+    /// fresh results.
+    /// </summary>
+    public async Task SynchronizeUserByIdAsync(long telegramId, CancellationToken cancellationToken = default)
+    {
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId, cancellationToken);
+        if (user == null) return;
+        await SynchronizeUserAsync(user, cancellationToken);
+    }
+
     private async Task SynchronizeUserAsync(User user, CancellationToken cancellationToken)
     {
         if (
@@ -85,17 +98,32 @@ public class NoteIndexer(
     )
     {
         var remoteNotes = new Dictionary<string, string>();
-        foreach (var note in await gitHubService.GetNotesAsync(context))
-        {
-            if (
-                note.Path is null
-                || !note.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
-            )
-            {
-                continue;
-            }
 
-            remoteNotes[note.Path] = note.Sha ?? string.Empty;
+        // The whole vault must be indexed, not just the repository root:
+        // walk every folder breadth-first.
+        var queue = new Queue<string?>();
+        queue.Enqueue(null);
+        while (queue.Count > 0)
+        {
+            var path = queue.Dequeue();
+            foreach (var entry in await gitHubService.GetNotesAsync(context, path))
+            {
+                if (entry.Type == ContentType.Dir)
+                {
+                    queue.Enqueue(entry.Path);
+                    continue;
+                }
+
+                if (
+                    entry.Path is null
+                    || !entry.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    continue;
+                }
+
+                remoteNotes[entry.Path] = entry.Sha ?? string.Empty;
+            }
         }
 
         var localNotes = await dbContext.IndexedNotes
@@ -157,8 +185,12 @@ public class NoteIndexer(
                 $"DELETE FROM NoteSearchFts WHERE TelegramUserId = {userId} AND NotePath = {path}",
                 cancellationToken
             );
+
+            // Index the file name together with the content so search matches
+            // note titles too.
+            var indexedText = $"{path}\n{content}";
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT INTO NoteSearchFts (TelegramUserId, NotePath, Content) VALUES ({userId}, {path}, {content})",
+                $"INSERT INTO NoteSearchFts (TelegramUserId, NotePath, Content) VALUES ({userId}, {path}, {indexedText})",
                 cancellationToken
             );
 

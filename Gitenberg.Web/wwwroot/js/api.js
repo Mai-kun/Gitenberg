@@ -135,6 +135,17 @@ export function saveNote(path, content, commitMessage) {
   });
 }
 
+export function moveNote(fromPath, toPath, content, commitMessage) {
+  return request('POST', '/api/notes/move', {
+    body: {
+      fromPath,
+      toPath,
+      ...(content !== undefined && content !== null ? { content } : {}),
+      ...(commitMessage ? { commitMessage } : {}),
+    },
+  });
+}
+
 export function deleteNote(path, commitMessage) {
   return request('DELETE', '/api/notes', {
     params: { path, ...(commitMessage ? { commitMessage } : {}) },
@@ -143,4 +154,26 @@ export function deleteNote(path, commitMessage) {
 
 export function searchNotes(query) {
   return request('GET', '/api/notes/search', { params: { query } });
+}
+
+export function syncStatus() {
+  return request('GET', '/api/sync/status');
+}
+
+export function syncNow() {
+  return request('POST', '/api/sync');
+}
+
+export function getSettings() {
+  return request('GET', '/api/register');
+}
+
+export function saveSettings({ githubToken, repositoryOwner, repositoryName }) {
+  return request('POST', '/api/register', {
+    body: {
+      ...(githubToken ? { githubToken } : {}),
+      repositoryOwner,
+      repositoryName,
+    },
+  });
 }

@@ -5,6 +5,7 @@ using Gitenberg.Tests.Mocks;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Notes;
+using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
@@ -29,6 +30,12 @@ public class NotesEndpointsTests
         _encryptionService = new TokenEncryptionService(provider);
         _gitHubService = new MockGitHubService();
         _memoryCache = new MemoryCache(new MemoryCacheOptions());
+    }
+
+    private static PendingSyncService CreatePendingSync(AppDbContext db)
+    {
+        PendingSyncService.EnsureTableCreated(db);
+        return new PendingSyncService(db);
     }
 
     private static AppDbContext CreateInMemoryDbContext()
@@ -90,7 +97,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, null, null, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.GetNotes(null, null, null, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -105,7 +112,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -129,7 +136,7 @@ public class NotesEndpointsTests
         await db.SaveChangesAsync();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -172,7 +179,7 @@ public class NotesEndpointsTests
         };
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -218,7 +225,7 @@ public class NotesEndpointsTests
         };
 
         // Act
-        var result = await NotesEndpoints.GetNotes("subfolder", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.GetNotes("subfolder", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -246,7 +253,7 @@ public class NotesEndpointsTests
         _gitHubService.GetNotesFunc = (_, _) => throw new Exception("GitHub API down");
 
         // Act
-        Func<Task> act = () => NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService, _memoryCache);
+        Func<Task> act = () => NotesEndpoints.GetNotes(null, 12345, null, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         await act.Should().ThrowAsync<Exception>().WithMessage("GitHub API down");
@@ -259,7 +266,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNoteContent(null!, 12345, null, db, _encryptionService, _gitHubService);
+        var result = await NotesEndpoints.GetNoteContent(null!, 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -293,7 +300,8 @@ public class NotesEndpointsTests
             null,
             db,
             _encryptionService,
-            _gitHubService
+            _gitHubService,
+            CreatePendingSync(db)
         );
 
         // Assert
@@ -325,7 +333,8 @@ public class NotesEndpointsTests
             null,
             db,
             _encryptionService,
-            _gitHubService
+            _gitHubService,
+            CreatePendingSync(db)
         );
 
         // Assert
@@ -358,8 +367,7 @@ public class NotesEndpointsTests
             12345,
             null,
             db,
-            _encryptionService,
-            _gitHubService,
+            CreatePendingSync(db),
             _memoryCache
         );
 
@@ -385,17 +393,6 @@ public class NotesEndpointsTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var requestCalled = false;
-        _gitHubService.CreateOrUpdateNoteFunc = (ctx, path, content, msg) =>
-        {
-            ctx.Token.Should().Be("pat_123");
-            path.Should().Be("notes/new.md");
-            content.Should().Be("hello");
-            msg.Should().Be("Create/Update message");
-            requestCalled = true;
-            return Task.CompletedTask;
-        };
-
         var request = new CreateOrUpdateNoteRequest("notes/new.md", "hello", "Create/Update message");
 
         // Act
@@ -404,8 +401,7 @@ public class NotesEndpointsTests
             12345,
             null,
             db,
-            _encryptionService,
-            _gitHubService,
+            CreatePendingSync(db),
             _memoryCache
         );
 
@@ -413,7 +409,11 @@ public class NotesEndpointsTests
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
-        requestCalled.Should().BeTrue();
+        var pending = await CreatePendingSync(db).GetOpsAsync(12345);
+        pending.Should().ContainSingle();
+        pending[0].Kind.Should().Be("save");
+        pending[0].FromPath.Should().Be("notes/new.md");
+        pending[0].Content.Should().Be("hello");
     }
 
     [Fact]
@@ -423,7 +423,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.DeleteNote(null!, "msg", 12345, null, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.DeleteNote(null!, "msg", 12345, null, db, CreatePendingSync(db), _memoryCache);
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -447,23 +447,25 @@ public class NotesEndpointsTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        _gitHubService.DeleteNoteFunc = (_, _, _) =>
-            throw new NotFoundException("Not found", HttpStatusCode.NotFound);
-
         // Act
-        Func<Task> act = () => NotesEndpoints.DeleteNote(
+        var result = await NotesEndpoints.DeleteNote(
             "notes/missing.md",
             "delete msg",
             12345,
             null,
             db,
-            _encryptionService,
-            _gitHubService,
+            CreatePendingSync(db),
             _memoryCache
         );
 
-        // Assert
-        await act.Should().ThrowAsync<NotFoundException>().WithMessage("Not found");
+        // Assert - local-first: the delete is queued, not pushed to GitHub.
+        var statusCodeResult = result as IStatusCodeHttpResult;
+        statusCodeResult.Should().NotBeNull();
+        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        var pending = await CreatePendingSync(db).GetOpsAsync(12345);
+        pending.Should().ContainSingle();
+        pending[0].Kind.Should().Be("delete");
+        pending[0].FromPath.Should().Be("notes/missing.md");
     }
 
     [Fact]
@@ -482,16 +484,6 @@ public class NotesEndpointsTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var deleteCalled = false;
-        _gitHubService.DeleteNoteFunc = (ctx, path, msg) =>
-        {
-            ctx.Token.Should().Be("pat_123");
-            path.Should().Be("notes/delete.md");
-            msg.Should().Be("delete msg");
-            deleteCalled = true;
-            return Task.CompletedTask;
-        };
-
         // Act
         var result = await NotesEndpoints.DeleteNote(
             "notes/delete.md",
@@ -499,8 +491,7 @@ public class NotesEndpointsTests
             12345,
             null,
             db,
-            _encryptionService,
-            _gitHubService,
+            CreatePendingSync(db),
             _memoryCache
         );
 
@@ -508,7 +499,10 @@ public class NotesEndpointsTests
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
-        deleteCalled.Should().BeTrue();
+        var pending = await CreatePendingSync(db).GetOpsAsync(12345);
+        pending.Should().ContainSingle();
+        pending[0].Kind.Should().Be("delete");
+        pending[0].FromPath.Should().Be("notes/delete.md");
     }
 
     [Fact]
@@ -545,9 +539,9 @@ public class NotesEndpointsTests
         };
 
         // Act - First call (should fetch from service and cache)
-        var result1 = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        var result1 = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         // Act - Second call (should hit cache)
-        var result2 = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        var result2 = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         callCount.Should().Be(1);
@@ -590,15 +584,15 @@ public class NotesEndpointsTests
         _gitHubService.CreateOrUpdateNoteFunc = (_, _, _, _) => Task.CompletedTask;
 
         // 1. First GetNotes (caches data)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         callCount.Should().Be(1);
 
         // 2. Create or Update Note (should bust cache)
         var request = new CreateOrUpdateNoteRequest("notes/new.md", "content", "msg");
-        await NotesEndpoints.CreateOrUpdateNote(request, 12345, null, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.CreateOrUpdateNote(request, 12345, null, db, CreatePendingSync(db), _memoryCache);
 
         // 3. Second GetNotes (should fetch from service again due to cache bust)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         callCount.Should().Be(2);
     }
 
@@ -637,14 +631,14 @@ public class NotesEndpointsTests
         _gitHubService.DeleteNoteFunc = (_, _, _) => Task.CompletedTask;
 
         // 1. First GetNotes (caches data)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         callCount.Should().Be(1);
 
         // 2. Delete Note (should bust cache)
-        await NotesEndpoints.DeleteNote("notes/note1.md", "msg", 12345, null, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.DeleteNote("notes/note1.md", "msg", 12345, null, db, CreatePendingSync(db), _memoryCache);
 
         // 3. Second GetNotes (should fetch from service again due to cache bust)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         callCount.Should().Be(2);
     }
 
@@ -703,13 +697,13 @@ public class NotesEndpointsTests
             Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { CreateNote("note1.md") });
 
         // Act - First call caches note1.md
-        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // GitHub now returns a different note, but the cache should not know about it
         _gitHubService.GetNotesFunc = (_, _) =>
             Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { CreateNote("note2.md") });
 
-        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         var valueResult = result as IValueHttpResult;
@@ -732,10 +726,10 @@ public class NotesEndpointsTests
         };
 
         // Act - same paths requested twice
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert - each distinct path fetched exactly once
         requestedPaths.Should().BeEquivalentTo("folder1", "folder2");
@@ -758,10 +752,10 @@ public class NotesEndpointsTests
         };
 
         // Act - each user requests twice
-        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert - each user has an independent cache entry
         callsPerUser[11111].Should().Be(1);
@@ -784,16 +778,16 @@ public class NotesEndpointsTests
         _gitHubService.CreateOrUpdateNoteFunc = (_, _, _, _) => Task.CompletedTask;
 
         // Act - cache both paths, then bust the user's cache via a write operation
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         callCount.Should().Be(2);
 
         var request = new CreateOrUpdateNoteRequest("notes/new.md", "content", "msg");
-        await NotesEndpoints.CreateOrUpdateNote(request, 12345, null, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.CreateOrUpdateNote(request, 12345, null, db, CreatePendingSync(db), _memoryCache);
 
         // Assert - both cached paths were invalidated
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         callCount.Should().Be(4);
     }
 
@@ -823,15 +817,15 @@ public class NotesEndpointsTests
         _gitHubService.CreateOrUpdateNoteFunc = (_, _, _, _) => Task.CompletedTask;
 
         // Act - cache for both users, then write for user1 only
-        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         var request = new CreateOrUpdateNoteRequest("notes/new.md", "content", "msg");
-        await NotesEndpoints.CreateOrUpdateNote(request, 11111, null, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.CreateOrUpdateNote(request, 11111, null, db, CreatePendingSync(db), _memoryCache);
 
         // Assert - user1's cache was busted, user2's was not
-        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache);
-        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache);
+        await NotesEndpoints.GetNotes(null, null, 11111, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, null, 22222, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         user1Calls.Should().Be(2);
         user2Calls.Should().Be(1);
     }
@@ -846,7 +840,7 @@ public class NotesEndpointsTests
         _gitHubService.GetNotesFunc = (_, _) => throw new Exception("GitHub API down");
 
         // Act - first attempt fails, then the service recovers
-        Func<Task> act = () => NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        Func<Task> act = () => NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
         await act.Should().ThrowAsync<Exception>().WithMessage("GitHub API down");
 
         var callCount = 0;
@@ -855,7 +849,7 @@ public class NotesEndpointsTests
             callCount++;
             return Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { CreateNote("note1.md") });
         };
-        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache);
+        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert - the failed attempt was not cached, the recovered call fetched fresh data
         callCount.Should().Be(1);

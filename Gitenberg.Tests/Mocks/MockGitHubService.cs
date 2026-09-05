@@ -10,6 +10,7 @@ public class MockGitHubService : IGitHubService
     public Func<GitHubRepositoryContext, string, Task<string>>? GetNoteContentFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, string, Task>? CreateOrUpdateNoteFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, Task>? DeleteNoteFunc { get; set; }
+    public Func<GitHubRepositoryContext, string, string, string?, string, Task>? MoveNoteFunc { get; set; }
 
     public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null)
     {
@@ -41,6 +42,19 @@ public class MockGitHubService : IGitHubService
     {
         return DeleteNoteFunc != null
             ? DeleteNoteFunc(context, path, commitMessage)
+            : Task.CompletedTask;
+    }
+
+    public Task MoveNoteAsync(
+        GitHubRepositoryContext context,
+        string fromPath,
+        string toPath,
+        string? content,
+        string commitMessage
+    )
+    {
+        return MoveNoteFunc != null
+            ? MoveNoteFunc(context, fromPath, toPath, content, commitMessage)
             : Task.CompletedTask;
     }
 }

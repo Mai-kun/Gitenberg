@@ -2,6 +2,7 @@ using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Registration;
 using Gitenberg.Web.Features.Search;
+using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Infrastructure;
@@ -45,8 +46,15 @@ builder.Services.AddSingleton(searchConfig);
 builder.Services.AddScoped<NoteIndexer>();
 builder.Services.AddHostedService<NoteIndexingService>();
 
-var app = builder.Build();
+var syncConfig = builder.Configuration
+                        .GetSection(SyncConfiguration.SectionName)
+                        .Get<SyncConfiguration>()
+                ?? new SyncConfiguration();
+builder.Services.AddSingleton(syncConfig);
+builder.Services.AddScoped<PendingSyncService>();
+builder.Services.AddHostedService<SyncFlushService>();
 
+var app = builder.Build();
 app.UseExceptionHandler();
 
 using (var scope = app.Services.CreateScope())
@@ -54,6 +62,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
     db.EnsureFtsTableCreated();
+    PendingSyncService.EnsureTableCreated(db);
 }
 
 if (app.Environment.IsDevelopment())
@@ -63,12 +72,23 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    // Keep dev iterations honest: never serve stale JS/CSS from the browser cache.
+    OnPrepareResponse = ctx =>
+    {
+        if (app.Environment.IsDevelopment())
+        {
+            ctx.Context.Response.Headers.CacheControl = "no-cache";
+        }
+    }
+});
 
 app.MapNotesEndpoints();
 app.MapRegistrationEndpoints();
 app.MapBotEndpoints();
 app.MapSearchEndpoints();
+app.MapSyncEndpoints();
 
 app.UseHttpsRedirection();
 app.Run();
