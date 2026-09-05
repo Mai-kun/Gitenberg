@@ -9,7 +9,9 @@ function create() {
 
   instance = new EasyMDE({
     element: textarea,
-    autosave: false,
+    // EasyMDE 2.18 throws "Cannot create property 'timeFormat' on boolean
+    // 'false'" when autosave is a bare false — it must be an object.
+    autosave: { enabled: false },
     autofocus: false,
     spellChecker: false,
     status: false,

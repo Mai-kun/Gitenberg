@@ -1,13 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Web;
+
+// Добавьте using
 
 namespace Gitenberg.Web.Features.TelegramBot.Auth;
 
-/// <summary>
-/// Validates Telegram Mini App <c>initData</c> using the HMAC-SHA256 algorithm described at
-/// https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app.
-/// </summary>
 public sealed class TelegramAuthValidator(string botToken) : ITelegramAuthValidator
 {
     private static readonly TimeSpan MaxInitDataAge = TimeSpan.FromHours(24);
@@ -19,48 +18,63 @@ public sealed class TelegramAuthValidator(string botToken) : ITelegramAuthValida
             return TelegramAuthResult.Invalid("initData is empty.");
         }
 
-        var parameters = ParseInitData(initData);
-        if (parameters.Count == 0)
+        var parsed = HttpUtility.ParseQueryString(initData);
+        var parameters = new Dictionary<string, string>();
+
+        string? receivedHash = null;
+
+        foreach (var key in parsed.AllKeys)
         {
-            return TelegramAuthResult.Invalid("initData contains no parameters.");
+            if (string.IsNullOrEmpty(key))
+            {
+                continue;
+            }
+
+            var val = parsed[key] ?? string.Empty;
+
+            if (key == "hash")
+            {
+                receivedHash = val;
+            }
+            else if (key != "signature")
+            {
+                parameters[key] = val;
+            }
         }
 
-        if (!parameters.TryGetValue("hash", out var receivedHash) || string.IsNullOrEmpty(receivedHash))
+        if (string.IsNullOrEmpty(receivedHash))
         {
-            return TelegramAuthResult.Invalid("initData is missing the 'hash' parameter.");
+            return TelegramAuthResult.Invalid("Missing 'hash' parameter.");
         }
 
+        // Собираем data-check-string ровно так, как требует Telegram
         var dataCheckString = string.Join(
-            '\n',
-            parameters
-                .Where(kv => kv.Key != "hash" && kv.Key != "signature")
-                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                .Select(kv => $"{kv.Key}={kv.Value}"));
+                "\n",
+                parameters
+                        .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                        .Select(kv => $"{kv.Key}={kv.Value}")
+        );
 
+        // Вычисляем ключ и хэш
         var secretKey = HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes("WebAppData"),
-            Encoding.UTF8.GetBytes(botToken));
-        var computedHash = HMACSHA256.HashData(secretKey, Encoding.UTF8.GetBytes(dataCheckString));
+                Encoding.UTF8.GetBytes("WebAppData"),
+                Encoding.UTF8.GetBytes(botToken.Trim())
+        );
 
-        byte[] receivedHashBytes;
-        try
-        {
-            receivedHashBytes = Convert.FromHexString(receivedHash);
-        }
-        catch (FormatException)
-        {
-            return TelegramAuthResult.Invalid("The 'hash' parameter is not valid hexadecimal.");
-        }
+        var computedHashBytes = HMACSHA256.HashData(secretKey, Encoding.UTF8.GetBytes(dataCheckString));
+        var computedHashHex = Convert.ToHexString(computedHashBytes).ToLowerInvariant();
 
-        if (!CryptographicOperations.FixedTimeEquals(computedHash, receivedHashBytes))
+        // Сравниваем
+        if (!string.Equals(computedHashHex, receivedHash.ToLowerInvariant(), StringComparison.Ordinal))
         {
             return TelegramAuthResult.Invalid("The 'hash' parameter does not match the computed signature.");
         }
 
+        // Проверка времени
         if (!parameters.TryGetValue("auth_date", out var authDateRaw)
             || !long.TryParse(authDateRaw, out var authDateSeconds))
         {
-            return TelegramAuthResult.Invalid("initData is missing a valid 'auth_date' parameter.");
+            return TelegramAuthResult.Invalid("Missing or invalid 'auth_date'.");
         }
 
         var authDate = DateTimeOffset.FromUnixTimeSeconds(authDateSeconds);
@@ -69,46 +83,25 @@ public sealed class TelegramAuthValidator(string botToken) : ITelegramAuthValida
             return TelegramAuthResult.Invalid("initData is older than 24 hours.");
         }
 
+        // Проверка пользователя
         if (!parameters.TryGetValue("user", out var userJson) || string.IsNullOrEmpty(userJson))
         {
-            return TelegramAuthResult.Invalid("initData is missing the 'user' parameter.");
+            return TelegramAuthResult.Invalid("Missing 'user' parameter.");
         }
 
-        TelegramUser? user;
         try
         {
-            user = JsonSerializer.Deserialize<TelegramUser>(userJson);
+            var user = JsonSerializer.Deserialize<TelegramUser>(userJson);
+            if (user is null || user.Id <= 0)
+            {
+                return TelegramAuthResult.Invalid("Invalid Telegram user id.");
+            }
+
+            return TelegramAuthResult.Valid(user);
         }
         catch (JsonException)
         {
             return TelegramAuthResult.Invalid("The 'user' parameter is not valid JSON.");
         }
-
-        if (user is null || user.Id <= 0)
-        {
-            return TelegramAuthResult.Invalid("The 'user' parameter is missing a valid Telegram user id.");
-        }
-
-        return TelegramAuthResult.Valid(user);
-    }
-
-    private static Dictionary<string, string> ParseInitData(string initData)
-    {
-        var parameters = new Dictionary<string, string>();
-
-        foreach (var segment in initData.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var separatorIndex = segment.IndexOf('=');
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            var key = Uri.UnescapeDataString(segment[..separatorIndex]);
-            var value = Uri.UnescapeDataString(segment[(separatorIndex + 1)..]);
-            parameters[key] = value;
-        }
-
-        return parameters;
     }
 }

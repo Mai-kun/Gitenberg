@@ -19,10 +19,22 @@ const STRINGS = {
   emptySearch: 'Ничего не найдено.',
   registerFailed: 'Не удалось подключить GitHub',
   confirmDelete: (path) => `Удалить заметку «${path}»?\n\nФайл будет удалён из репозитория GitHub.`,
+  confirmDeleteFolder: (name) => `Удалить папку «${name}»?\n\nВсе файлы внутри будут удалены из репозитория GitHub.`,
   confirmDiscard: 'Есть несохранённые изменения. Выйти без сохранения?',
   confirmLeaveRegister: 'Выйти без сохранения настроек?',
   saved: 'Заметка сохранена',
   deleted: 'Заметка удалена',
+  deletedFolder: 'Папка удалена',
+  deleting: 'Удаление…',
+  infoTitle: 'Свойства',
+  infoTypeFile: 'Файл',
+  infoTypeFolder: 'Папка',
+  infoTypeName: 'Имя',
+  infoTypePath: 'Путь',
+  infoTypeSize: 'Размер',
+  infoTypeContains: 'Внутри',
+  openOnGitHub: 'Открыть на GitHub',
+  folderItemsCount: (n) => `${n} ${plural(n, 'элемент', 'элемента', 'элементов')}`,
   errorPrefix: 'Ошибка',
   registerBtnBusy: 'Подключение…',
   registerBtnIdle: 'Подключить GitHub',
@@ -37,6 +49,7 @@ const STRINGS = {
 const FOLDER_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>';
 const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>';
 const TRASH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
+const KEBAB_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
 
 // ---------------------------------------------------------------------------
 // Telegram helpers
@@ -58,10 +71,28 @@ function haptic(type, ...args) {
   }
 }
 
+// Russian plural: plural(1, 'элемент', 'элемента', 'элементов') → 'элемент'.
+function plural(n, one, few, many) {
+  const mod100 = Math.abs(n) % 100;
+  const mod10 = mod100 % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
 function showConfirm(message) {
   const webApp = tg();
-  if (webApp?.showConfirm) {
-    return new Promise((resolve) => webApp.showConfirm(message, resolve));
+  // Outside Telegram the SDK still exposes a WebApp stub whose showConfirm
+  // throws WebAppMethodUnsupported — detect the stub and fall back to
+  // window.confirm, otherwise deletion would silently hang on an
+  // unresolved promise.
+  if (webApp?.showConfirm && webApp.platform !== 'unknown') {
+    try {
+      return new Promise((resolve) => webApp.showConfirm(message, resolve));
+    } catch {
+      /* fall through to window.confirm */
+    }
   }
   return Promise.resolve(window.confirm(message));
 }
@@ -150,6 +181,12 @@ const els = {
   editorContainer: $('editor-container'),
   btnEditorSave: $('btn-editor-save'),
   toast: $('toast'),
+  infoModal: $('info-modal'),
+  infoTitle: $('info-title'),
+  infoFields: $('info-fields'),
+  infoGithubLink: $('info-github-link'),
+  infoClose: $('info-close'),
+  infoBackdrop: $('info-backdrop'),
 };
 
 const state = {
@@ -364,6 +401,7 @@ function renderNotes(items) {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = `note-row ${isDir ? 'is-dir' : 'is-file'}`;
+    row.dataset.path = item.path;
 
     const icon = document.createElement('span');
     icon.className = 'note-icon';
@@ -383,18 +421,29 @@ function renderNotes(items) {
 
     row.append(icon, body);
 
-    if (!isDir) {
-      const del = document.createElement('span');
-      del.className = 'note-delete';
-      del.setAttribute('role', 'button');
-      del.setAttribute('aria-label', `Удалить ${item.name}`);
-      del.innerHTML = TRASH_ICON;
-      del.addEventListener('click', (event) => {
-        event.stopPropagation();
-        void confirmAndDeleteNote(item.path, item.name);
-      });
-      row.append(del);
-    }
+    const info = document.createElement('span');
+    info.className = 'note-info';
+    info.setAttribute('role', 'button');
+    info.setAttribute('aria-label', `Свойства ${item.name}`);
+    info.title = 'Свойства';
+    info.innerHTML = KEBAB_ICON;
+    info.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openInfoModal(item, isDir);
+    });
+    row.append(info);
+
+    const del = document.createElement('span');
+    del.className = 'note-delete';
+    del.setAttribute('role', 'button');
+    del.setAttribute('aria-label', `Удалить ${item.name}`);
+    del.title = 'Удалить';
+    del.innerHTML = TRASH_ICON;
+    del.addEventListener('click', (event) => {
+      event.stopPropagation();
+      void confirmAndDeleteItem(item.path, item.name, isDir);
+    });
+    row.append(del);
 
     if (isDir) {
       // Navigate into the folder (loadFolder + breadcrumbs via enterExplorer).
@@ -412,6 +461,27 @@ function renderNotes(items) {
 
     els.notesList.append(row);
   }
+
+  if (sorted.some(isDirectory)) void loadFolderItemCounts(sorted.filter(isDirectory));
+}
+
+// GitHub reports no child count for directories, so fetch each folder's
+// listing (cached server-side) and replace the meta line with the count.
+async function loadFolderItemCounts(dirs) {
+  await Promise.allSettled(dirs.map(async (item) => {
+    let children;
+    try {
+      children = await api.listNotes(item.path);
+    } catch {
+      return; // keep the generic 'Папка' label on failure
+    }
+    const count = Array.isArray(children) ? children.length : 0;
+    const row = els.notesList.querySelector(`.note-row[data-path="${CSS.escape(item.path)}"]`);
+    const meta = row?.querySelector('.note-meta');
+    if (meta && meta.textContent === 'Папка') {
+      meta.textContent = STRINGS.folderItemsCount(count);
+    }
+  }));
 }
 
 function formatSize(size) {
@@ -657,13 +727,66 @@ async function saveCurrentNote() {
   }
 }
 
-async function confirmAndDeleteNote(path, displayName) {
-  const ok = await showConfirm(STRINGS.confirmDelete(displayName ?? path));
+function openInfoModal(item, isDir) {
+  els.infoTitle.textContent = STRINGS.infoTitle;
+  els.infoFields.textContent = '';
+
+  const addField = (label, value) => {
+    const dt = document.createElement('dt');
+    dt.textContent = label;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    els.infoFields.append(dt, dd);
+  };
+
+  addField('Тип', isDir ? STRINGS.infoTypeFolder : STRINGS.infoTypeFile);
+  addField(STRINGS.infoTypeName, item.name ?? '');
+  addField(STRINGS.infoTypePath, item.path ?? '');
+  if (isDir) {
+    // Best-effort count; keep it silent when the listing is unavailable.
+    void api.listNotes(item.path)
+      .then((children) => {
+        if (!els.infoModal.hidden) {
+          addField(STRINGS.infoTypeContains, STRINGS.folderItemsCount(Array.isArray(children) ? children.length : 0));
+        }
+      })
+      .catch(() => {});
+  } else {
+    addField(STRINGS.infoTypeSize, formatSize(item.size));
+  }
+
+  if (item.htmlUrl) {
+    els.infoGithubLink.href = item.htmlUrl;
+    els.infoGithubLink.hidden = false;
+  } else {
+    els.infoGithubLink.hidden = true;
+  }
+
+  els.infoModal.hidden = false;
+}
+
+function closeInfoModal() {
+  els.infoModal.hidden = true;
+  els.infoGithubLink.hidden = true;
+}
+
+els.infoClose.addEventListener('click', closeInfoModal);
+els.infoBackdrop.addEventListener('click', closeInfoModal);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !els.infoModal.hidden) closeInfoModal();
+});
+
+async function confirmAndDeleteItem(path, displayName, isDir) {
+  const message = isDir
+    ? STRINGS.confirmDeleteFolder(displayName ?? path)
+    : STRINGS.confirmDelete(displayName ?? path);
+  const ok = await showConfirm(message);
   if (!ok) return;
   try {
+    if (isDir) showToast(STRINGS.deleting, 10000);
     await api.deleteNote(path);
     haptic('success');
-    showToast(STRINGS.deleted);
+    showToast(isDir ? STRINGS.deletedFolder : STRINGS.deleted);
     if (!els.views.editor.hidden) {
       mainButton.hide();
       await enterExplorer(state.currentPath);
@@ -691,7 +814,7 @@ els.fabCreate.addEventListener('click', () => {
 els.btnEditorBack.addEventListener('click', () => void leaveEditor());
 els.btnEditorDelete.addEventListener('click', () => {
   if (state.editor.mode === 'edit' && state.editor.path) {
-    void confirmAndDeleteNote(state.editor.path, state.editor.path.split('/').pop());
+    void confirmAndDeleteItem(state.editor.path, state.editor.path.split('/').pop(), false);
   }
 });
 els.btnEditorSave.addEventListener('click', () => void saveCurrentNote());

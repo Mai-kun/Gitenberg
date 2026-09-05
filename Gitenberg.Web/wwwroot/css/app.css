@@ -367,7 +367,11 @@ input, textarea {
   min-width: 0;
 }
 
+/* display:block is required: a bare <span> stays inline, and overflow /
+   text-overflow are ignored on inline boxes — long names then paint over
+   the row buttons and steal their taps. */
 .note-name {
+  display: block;
   font-size: 16px;
   font-weight: 500;
   overflow: hidden;
@@ -376,11 +380,16 @@ input, textarea {
 }
 
 .note-meta {
+  display: block;
   font-size: 12px;
   color: var(--tg-hint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.note-delete {
+.note-delete,
+.note-info {
   flex-shrink: 0;
   width: 34px;
   height: 34px;
@@ -392,6 +401,10 @@ input, textarea {
 }
 
 .note-delete:active { color: var(--tg-destructive); background: var(--tg-secondary); }
+
+.note-info:active { color: var(--tg-button); background: var(--tg-secondary); }
+
+.note-info svg { width: 18px; height: 18px; }
 
 .status-text {
   padding: 24px var(--pad);
@@ -570,6 +583,75 @@ input, textarea {
 }
 
 #editor-container .CodeMirror-placeholder { color: var(--tg-hint); }
+
+/* ==========================================================================
+   Info sheet (folder / file properties)
+   ========================================================================== */
+
+.info-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.info-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.info-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  max-height: 80dvh;
+  overflow-y: auto;
+  background: var(--tg-bg);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 12px var(--pad) calc(16px + env(safe-area-inset-bottom));
+  animation: sheet-in 0.2s ease;
+}
+
+@keyframes sheet-in {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.info-sheet h2 {
+  font-size: 17px;
+  margin: 0 0 12px;
+  text-align: center;
+}
+
+.info-fields {
+  margin: 0 0 14px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  font-size: 14px;
+}
+
+.info-fields dt {
+  color: var(--tg-hint);
+  white-space: nowrap;
+}
+
+.info-fields dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.info-github-link {
+  display: block;
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
 
 /* ==========================================================================
    Toast

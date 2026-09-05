@@ -93,14 +93,56 @@ public class GitHubService : IGitHubService
     {
         var client = CreateClient(context.Token);
         var contents = await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
-        var sha = contents[0].Sha;
 
-        await client.Repository.Content.DeleteFile(
-            context.Owner,
-            context.Repo,
-            path,
-            new DeleteFileRequest(commitMessage, sha)
-        );
+        // A file path returns a single entry whose Path matches the request;
+        // anything else (multiple children, a Dir entry, an empty result) is
+        // treated as a folder and deleted recursively.
+        var first = contents.FirstOrDefault();
+        var normalizedPath = path.Trim('/');
+        var isFile = first != null
+            && first.Type == ContentType.File
+            && string.Equals(first.Path?.Trim('/'), normalizedPath, StringComparison.OrdinalIgnoreCase);
+
+        if (isFile)
+        {
+            await client.Repository.Content.DeleteFile(
+                context.Owner,
+                context.Repo,
+                first.Path,
+                new DeleteFileRequest(commitMessage, first.Sha)
+            );
+            return;
+        }
+
+        await DeleteFolderRecursiveAsync(client, context, path, commitMessage);
+    }
+
+    private static async Task DeleteFolderRecursiveAsync(
+        GitHubClient client,
+        GitHubRepositoryContext context,
+        string path,
+        string commitMessage
+    )
+    {
+        // GitHub has no folder-delete API: remove every file bottom-up.
+        // Sequential commits avoid ref conflicts from parallel deletions.
+        var contents = await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
+        foreach (var item in contents)
+        {
+            if (item.Type == ContentType.Dir)
+            {
+                await DeleteFolderRecursiveAsync(client, context, item.Path, commitMessage);
+            }
+            else
+            {
+                await client.Repository.Content.DeleteFile(
+                    context.Owner,
+                    context.Repo,
+                    item.Path,
+                    new DeleteFileRequest(commitMessage, item.Sha)
+                );
+            }
+        }
     }
 
     private static GitHubClient CreateClient(string token)
