@@ -1,0 +1,22 @@
+# Build output
+**/bin/
+**/obj/
+
+# Local state — never bake into the image
+**/*.db
+**/*.db-wal
+**/*.db-shm
+temp-keys/
+data/
+keys/
+.env
+
+# Tests, tooling and IDE files
+Gitenberg.Tests/
+.git/
+.idea/
+.vscode/
+.zcode/
+.aider.*
+*.user
+*.slnx

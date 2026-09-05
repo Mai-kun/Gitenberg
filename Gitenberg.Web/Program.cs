@@ -8,6 +8,7 @@ using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using Telegram.Bot;
@@ -21,7 +22,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-builder.Services.AddDataProtection();
+var keysPath = builder.Configuration["DataProtection:KeysPath"] ?? "temp-keys";
+Directory.CreateDirectory(keysPath);
+builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
+        .SetApplicationName("GitenbergApp");
 builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
 builder.Services.AddScoped<IGitHubService, GitHubService>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -32,10 +37,15 @@ var botConfig = builder.Configuration
                         .Get<BotConfiguration>()
                 ?? new BotConfiguration();
 builder.Services.AddSingleton(botConfig);
-builder.Services.AddHttpClient("tgwebhook")
-        .AddTypedClient<ITelegramBotClient>((httpClient, sp) => new TelegramBotClient(botConfig.BotToken, httpClient));
+// TelegramBotClient throws on an empty token, which would crash the host on startup —
+// only wire the client and webhook registration when the bot is actually configured.
+if (!string.IsNullOrWhiteSpace(botConfig.BotToken))
+{
+    builder.Services.AddHttpClient("tgwebhook")
+            .AddTypedClient<ITelegramBotClient>((httpClient, sp) => new TelegramBotClient(botConfig.BotToken, httpClient));
+    builder.Services.AddHostedService<ConfigureWebhook>();
+}
 builder.Services.AddScoped<UpdateHandler>();
-builder.Services.AddHostedService<ConfigureWebhook>();
 builder.Services.AddSingleton<ITelegramAuthValidator>(_ => new TelegramAuthValidator(botConfig.BotToken));
 
 var searchConfig = builder.Configuration

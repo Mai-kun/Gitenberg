@@ -491,3 +491,6 @@ AGENT.md
 .aider*
 .zcode
 Gitenberg.Web/appsettings.Development.json
+data/
+keys/
+temp-keys/

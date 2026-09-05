@@ -1,0 +1,20 @@
+services:
+  gitenberg-web:
+    build:
+      context: .
+      dockerfile: Gitenberg.Web/Dockerfile
+    container_name: gitenberg-web
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Data Source=/app/data/gitenberg.db
+      - DataProtection__KeysPath=/app/keys
+      # Values are read from the .env file next to this compose file (see .env.example).
+      - TelegramBot__BotToken=${TELEGRAM_BOT_TOKEN:-}
+      - TelegramBot__HostAddress=${TELEGRAM_HOST_ADDRESS:-}
+      - TelegramBot__SecretToken=${TELEGRAM_SECRET_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+      - ./keys:/app/keys
+    restart: unless-stopped
