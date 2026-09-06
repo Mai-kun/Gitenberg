@@ -230,8 +230,27 @@
       <h2 id="info-title">Свойства</h2>
       <dl id="info-fields" class="info-fields"></dl>
       <a id="info-github-link" class="info-github-link" target="_blank" rel="noopener" hidden>Открыть на GitHub</a>
+      <button id="info-history" type="button" class="btn btn-secondary" hidden>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 7v5l3 3"/>
+        </svg>
+        <span data-i18n="historyButton">История</span>
+      </button>
       <button id="info-move" type="button" class="btn btn-secondary" hidden>Переместить / переименовать</button>
       <button id="info-close" type="button" class="btn btn-secondary" data-i18n="close">Закрыть</button>
+    </div>
+  </div>
+
+  <!-- ============ History sheet: commit list + version preview ============ -->
+  <div id="history-modal" class="info-modal" hidden>
+    <div id="history-backdrop" class="info-backdrop"></div>
+    <div class="info-sheet" role="dialog" aria-modal="true" aria-labelledby="history-title">
+      <h2 id="history-title" data-i18n="historyTitle">История версий</h2>
+      <div id="history-path" class="history-path"></div>
+      <div id="history-pending" class="history-warning" hidden data-i18n="historyPendingWarning">Есть несинхронизированные изменения.</div>
+      <div id="history-list" class="history-list"></div>
+      <button id="history-close" type="button" class="btn btn-secondary" data-i18n="close">Закрыть</button>
     </div>
   </div>
 

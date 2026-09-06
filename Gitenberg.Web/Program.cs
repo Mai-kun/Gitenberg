@@ -102,6 +102,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.MapNotesEndpoints();
+app.MapHistoryEndpoints();
 app.MapRegistrationEndpoints();
 app.MapBotEndpoints();
 app.MapSearchEndpoints();

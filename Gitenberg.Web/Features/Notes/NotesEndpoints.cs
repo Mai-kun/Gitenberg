@@ -269,7 +269,7 @@ public static class NotesEndpoints
         return Results.Ok(new { Message = $"Move of '{request.FromPath}' to '{request.ToPath}' queued; it will be synced to GitHub.", Pending = true });
     }
 
-    private static void BustUserCache(IMemoryCache memoryCache, long telegramId)
+    internal static void BustUserCache(IMemoryCache memoryCache, long telegramId)
     {
         var ctsKey = $"notes_cts_{telegramId}";
         if (memoryCache.TryGetValue(ctsKey, out CancellationTokenSource? cts))

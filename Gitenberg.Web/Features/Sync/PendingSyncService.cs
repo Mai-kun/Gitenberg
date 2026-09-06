@@ -10,7 +10,7 @@ using Octokit;
 
 namespace Gitenberg.Web.Features.Sync;
 
-public record PendingOp(long Id, string Kind, string FromPath, string? ToPath, string? Content, DateTime CreatedAt);
+public record PendingOp(long Id, string Kind, string FromPath, string? ToPath, string? Content, DateTime CreatedAt, string? CommitMessage = null);
 
 /// <summary>
 /// Local-first write queue: saves, deletes and moves are stored in SQLite and
@@ -30,27 +30,45 @@ public class PendingSyncService(AppDbContext dbContext)
                 FromPath TEXT NOT NULL,
                 ToPath TEXT NULL,
                 Content TEXT NULL,
+                CommitMessage TEXT NULL,
                 CreatedAt TEXT NOT NULL
             );
             """);
+
+        // Databases created before CommitMessage existed: add the column in place.
+        var hasCommitMessage = db.Database.SqlQuery<int>(
+            $"SELECT COUNT(*) AS Value FROM pragma_table_info('PendingNoteOps') WHERE name = 'CommitMessage'"
+        ).Single();
+        if (hasCommitMessage == 0)
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE PendingNoteOps ADD COLUMN CommitMessage TEXT NULL;");
+        }
     }
 
-    public async Task EnqueueAsync(long telegramId, string kind, string fromPath, string? toPath = null, string? content = null)
+    public async Task EnqueueAsync(
+        long telegramId,
+        string kind,
+        string fromPath,
+        string? toPath = null,
+        string? content = null,
+        string? commitMessage = null
+    )
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO PendingNoteOps (TelegramUserId, Kind, FromPath, ToPath, Content, CreatedAt) VALUES ({uid}, {kind}, {fromPath.Trim('/')}, {toPath}, {content}, {DateTime.UtcNow.ToString("o")})");
+            $"INSERT INTO PendingNoteOps (TelegramUserId, Kind, FromPath, ToPath, Content, CommitMessage, CreatedAt) VALUES ({uid}, {kind}, {fromPath.Trim('/')}, {toPath}, {content}, {commitMessage}, {DateTime.UtcNow.ToString("o")})");
     }
 
     public async Task<List<PendingOp>> GetOpsAsync(long telegramId)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
         var rows = await dbContext.Database.SqlQuery<PendingOpRow>(
-            $"SELECT Id, Kind, FromPath, ToPath, Content, CreatedAt FROM PendingNoteOps WHERE TelegramUserId = {uid} ORDER BY Id"
+            $"SELECT Id, Kind, FromPath, ToPath, Content, CommitMessage, CreatedAt FROM PendingNoteOps WHERE TelegramUserId = {uid} ORDER BY Id"
         ).ToListAsync();
         return rows.Select(r => new PendingOp(
             r.Id, r.Kind, r.FromPath, r.ToPath, r.Content,
-            DateTime.TryParse(r.CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var d) ? d : DateTime.UtcNow
+            DateTime.TryParse(r.CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal, out var d) ? d : DateTime.UtcNow,
+            r.CommitMessage
         )).ToList();
     }
 
@@ -68,7 +86,7 @@ public class PendingSyncService(AppDbContext dbContext)
             $"DELETE FROM PendingNoteOps WHERE Id = {id}");
     }
 
-    private sealed record PendingOpRow(long Id, string Kind, string FromPath, string? ToPath, string? Content, string CreatedAt);
+    private sealed record PendingOpRow(long Id, string Kind, string FromPath, string? ToPath, string? Content, string? CommitMessage, string CreatedAt);
 
     /// <summary>
     /// Replays the user's pending ops on GitHub in order. Ops failing with
@@ -91,7 +109,7 @@ public class PendingSyncService(AppDbContext dbContext)
                 switch (op.Kind)
                 {
                     case "save":
-                        await gitHubService.CreateOrUpdateNoteAsync(context, op.FromPath, op.Content ?? string.Empty, $"Update note: {op.FromPath}");
+                        await gitHubService.CreateOrUpdateNoteAsync(context, op.FromPath, op.Content ?? string.Empty, op.CommitMessage ?? $"Update note: {op.FromPath}");
                         break;
                     case "delete":
                         try

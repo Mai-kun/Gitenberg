@@ -722,6 +722,108 @@ input, textarea {
 .info-sheet .btn { margin-bottom: 10px; }
 .info-sheet .btn:last-child { margin-bottom: 0; }
 
+/* History sheet: commit cards, expandable version preview */
+.history-path {
+  font-size: 13px;
+  color: var(--tg-hint);
+  word-break: break-all;
+  margin: -6px 0 10px;
+}
+
+.history-warning {
+  font-size: 13px;
+  color: var(--tg-text);
+  background: var(--tg-secondary);
+  border-left: 3px solid var(--tg-accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.history-item {
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--tg-secondary);
+}
+
+.history-head {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.history-head:active { opacity: 0.75; }
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--tg-hint);
+}
+
+.history-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.history-author {
+  color: var(--tg-text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-sha {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.history-message {
+  font-size: 13px;
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.history-preview {
+  border-top: 1px solid var(--tg-section-sep);
+  padding: 10px 12px 12px;
+}
+
+.history-pre {
+  margin: 0 0 10px;
+  padding: 10px;
+  max-height: 40vh;
+  overflow: auto;
+  background: var(--tg-bg);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .md-help-hint {
   font-size: 13px;
   color: var(--tg-hint);

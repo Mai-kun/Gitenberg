@@ -16,6 +16,12 @@ public class MockGitHubService : IGitHubService
     public Func<GitHubRepositoryContext, string?, Task<byte[]>>? GetRepositoryArchiveFunc { get; set; }
     public List<(GitHubRepositoryContext Context, string? Reference)> ArchiveRequests { get; } = new();
 
+    public Func<GitHubRepositoryContext, string, Task<IReadOnlyList<NoteCommitInfo>>>? GetCommitHistoryFunc { get; set; }
+    public List<(GitHubRepositoryContext Context, string Path)> HistoryRequests { get; } = new();
+    public Func<GitHubRepositoryContext, string, string, Task<string>>? GetNoteContentAtCommitFunc { get; set; }
+    public List<(GitHubRepositoryContext Context, string Path, string Sha)> ContentAtCommitRequests { get; } = new();
+    public List<(GitHubRepositoryContext Context, string Path, string Content, string CommitMessage)> SavedNotes { get; } = new();
+
     public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null)
     {
         return GetNotesFunc != null
@@ -37,9 +43,26 @@ public class MockGitHubService : IGitHubService
         string commitMessage
     )
     {
+        SavedNotes.Add((context, path, content, commitMessage));
         return CreateOrUpdateNoteFunc != null
             ? CreateOrUpdateNoteFunc(context, path, content, commitMessage)
             : Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<NoteCommitInfo>> GetCommitHistoryAsync(GitHubRepositoryContext context, string path)
+    {
+        HistoryRequests.Add((context, path));
+        return GetCommitHistoryFunc != null
+            ? GetCommitHistoryFunc(context, path)
+            : Task.FromResult<IReadOnlyList<NoteCommitInfo>>(new List<NoteCommitInfo>());
+    }
+
+    public Task<string> GetNoteContentAtCommitAsync(GitHubRepositoryContext context, string path, string sha)
+    {
+        ContentAtCommitRequests.Add((context, path, sha));
+        return GetNoteContentAtCommitFunc != null
+            ? GetNoteContentAtCommitFunc(context, path, sha)
+            : Task.FromResult(string.Empty);
     }
 
     public Task DeleteNoteAsync(GitHubRepositoryContext context, string path, string commitMessage)

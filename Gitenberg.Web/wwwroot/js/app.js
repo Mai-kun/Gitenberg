@@ -155,9 +155,17 @@ const els = {
   infoTitle: $('info-title'),
   infoFields: $('info-fields'),
   infoGithubLink: $('info-github-link'),
+  infoHistory: $('info-history'),
   infoMove: $('info-move'),
   infoClose: $('info-close'),
   infoBackdrop: $('info-backdrop'),
+  historyModal: $('history-modal'),
+  historyTitle: $('history-title'),
+  historyPath: $('history-path'),
+  historyPending: $('history-pending'),
+  historyList: $('history-list'),
+  historyClose: $('history-close'),
+  historyBackdrop: $('history-backdrop'),
   moveModal: $('move-modal'),
   moveFolder: $('move-folder'),
   moveNewFolderField: $('move-new-folder-field'),
@@ -212,6 +220,8 @@ const state = {
     path: null, // original path in edit mode
     originalContent: null,
   },
+  historyPath: null, // note path shown in the history sheet
+  historySeq: 0, // guards against out-of-order history responses
 };
 
 // Unique #tags in a markdown text (headings excluded by construction: their #
@@ -266,7 +276,24 @@ function showToast(message, ms = 2200) {
   }, ms);
 }
 
+// fetch() rejects with a TypeError on network failures (server unreachable,
+// offline). The browser message ("Failed to fetch") is cryptic — show a
+// friendly localized hint instead.
+function isNetworkError(error) {
+  return error instanceof TypeError && /fetch|network|load failed/i.test(error?.message || '');
+}
+
+function friendlyErrorText(error) {
+  if (isNetworkError(error)) return STRINGS.networkError;
+  return error instanceof Error && error.message ? error.message : STRINGS.loadFailed;
+}
+
 function showErrorToast(error) {
+  if (isNetworkError(error)) {
+    showToast(`${STRINGS.errorPrefix}: ${STRINGS.networkError}`);
+    haptic('error');
+    return;
+  }
   let message = STRINGS.loadFailed;
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
     message = error.message;
@@ -941,6 +968,8 @@ function openInfoModal(item, isDir) {
 
   // Moving / renaming works for files and folders (folders move recursively).
   els.infoMove.hidden = false;
+  // Version history is per-file: folders have no single content to restore.
+  els.infoHistory.hidden = isDir;
 
   els.infoModal.hidden = false;
 }
@@ -953,8 +982,212 @@ function closeInfoModal() {
 els.infoClose.addEventListener('click', closeInfoModal);
 els.infoBackdrop.addEventListener('click', closeInfoModal);
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !els.infoModal.hidden) closeInfoModal();
+  if (event.key !== 'Escape') return;
+  // History sits on top of the properties sheet — close it first.
+  if (!els.historyModal.hidden) closeHistoryModal();
+  else if (!els.infoModal.hidden) closeInfoModal();
 });
+
+// ---------------------------------------------------------------------------
+// History sheet: commit list for the note file with per-version preview and
+// one-click restore (a new commit with the old content, via the sync queue).
+// ---------------------------------------------------------------------------
+
+els.infoHistory.addEventListener('click', () => {
+  if (state.infoItem?.path) openHistoryModal(state.infoItem.path);
+});
+
+function formatHistoryDate(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(getLang() === 'ru' ? 'ru-RU' : 'en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+async function openHistoryModal(path) {
+  state.historyPath = path;
+  state.historySeq = (state.historySeq ?? 0) + 1;
+  const seq = state.historySeq;
+
+  els.historyPath.textContent = path;
+  els.historyPending.hidden = true;
+  els.historyList.textContent = '';
+  const loading = document.createElement('div');
+  loading.className = 'status-text';
+  loading.textContent = STRINGS.loading;
+  els.historyList.append(loading);
+  els.historyModal.hidden = false;
+
+  try {
+    const data = await api.listNoteHistory(path);
+    if (seq !== state.historySeq || els.historyModal.hidden) return;
+    renderHistory(data);
+  } catch (error) {
+    if (seq !== state.historySeq || els.historyModal.hidden) return;
+    els.historyList.textContent = '';
+    const failed = document.createElement('div');
+    failed.className = 'status-text';
+    failed.textContent = friendlyErrorText(error);
+    els.historyList.append(failed);
+  }
+}
+
+function renderHistory(data) {
+  els.historyList.textContent = '';
+  els.historyPending.hidden = !data?.hasPendingChanges;
+
+  const commits = Array.isArray(data?.commits) ? data.commits : [];
+  if (!commits.length) {
+    const empty = document.createElement('div');
+    empty.className = 'status-text';
+    empty.textContent = STRINGS.historyEmpty;
+    els.historyList.append(empty);
+    return;
+  }
+  for (const commit of commits) {
+    els.historyList.append(buildHistoryItem(commit));
+  }
+}
+
+function buildHistoryItem(commit) {
+  const item = document.createElement('div');
+  item.className = 'history-item';
+
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'history-head';
+
+  const meta = document.createElement('div');
+  meta.className = 'history-meta';
+  if (commit.authorAvatarUrl) {
+    const avatar = document.createElement('img');
+    avatar.className = 'history-avatar';
+    avatar.src = commit.authorAvatarUrl;
+    avatar.alt = '';
+    avatar.loading = 'lazy';
+    meta.append(avatar);
+  }
+  const who = document.createElement('span');
+  who.className = 'history-author';
+  who.textContent = commit.authorLogin || commit.authorName || STRINGS.historyUnknownAuthor;
+  const when = document.createElement('span');
+  when.className = 'history-date';
+  when.textContent = formatHistoryDate(commit.date);
+  const sha = document.createElement('span');
+  sha.className = 'history-sha';
+  sha.textContent = (commit.sha || '').slice(0, 7);
+  meta.append(who, when, sha);
+
+  const message = document.createElement('div');
+  message.className = 'history-message';
+  message.textContent = commit.message || STRINGS.historyNoMessage;
+
+  head.append(meta, message);
+
+  const body = document.createElement('div');
+  body.className = 'history-preview';
+  body.hidden = true;
+
+  head.addEventListener('click', () => void toggleHistoryPreview(head, body, commit));
+  item.append(head, body);
+  return item;
+}
+
+async function toggleHistoryPreview(head, body, commit) {
+  const isOpen = !body.hidden;
+
+  // Only one version stays expanded at a time.
+  for (const other of els.historyList.querySelectorAll('.history-preview')) {
+    if (other !== body) other.hidden = true;
+  }
+  for (const other of els.historyList.querySelectorAll('.history-head.open')) {
+    if (other !== head) other.classList.remove('open');
+  }
+
+  body.hidden = isOpen;
+  head.classList.toggle('open', !isOpen);
+  if (isOpen || body.dataset.loading === '1') return;
+
+  body.textContent = '';
+  body.dataset.loading = '1';
+  const loading = document.createElement('div');
+  loading.className = 'status-text';
+  loading.textContent = STRINGS.loading;
+  body.append(loading);
+
+  const path = state.historyPath;
+  try {
+    const data = await api.getNoteVersion(path, commit.sha);
+    body.textContent = '';
+    if (data?.content === null || data?.content === undefined) {
+      const tooLarge = document.createElement('div');
+      tooLarge.className = 'status-text';
+      tooLarge.textContent = STRINGS.tooLarge;
+      body.append(tooLarge);
+      return;
+    }
+    const pre = document.createElement('pre');
+    pre.className = 'history-pre';
+    pre.textContent = data.content;
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'btn btn-primary history-restore';
+    const label = document.createElement('span');
+    label.className = 'btn-label';
+    label.textContent = STRINGS.historyRestore;
+    restoreBtn.append(label);
+    restoreBtn.addEventListener('click', () => void restoreVersion(path, commit, restoreBtn));
+
+    body.append(pre, restoreBtn);
+  } catch (error) {
+    body.textContent = '';
+    const failed = document.createElement('div');
+    failed.className = 'status-text';
+    failed.textContent = friendlyErrorText(error);
+    body.append(failed);
+  } finally {
+    delete body.dataset.loading;
+  }
+}
+
+async function restoreVersion(path, commit, btn) {
+  const shortSha = (commit.sha || '').slice(0, 7);
+  const ok = await showConfirm(STRINGS.historyRestoreConfirm(shortSha));
+  if (!ok) return;
+
+  setButtonBusy(btn, true, STRINGS.historyRestoring, STRINGS.historyRestore);
+  try {
+    await api.restoreNoteVersion(path, commit.sha);
+    closeHistoryModal();
+    showToast(STRINGS.historyRestored);
+    invalidateVaultIndex();
+    void refreshSyncBadge();
+
+    // A note open in the editor must show the restored content, not the stale one.
+    if (!els.views.editor.hidden && state.editor.mode === 'edit' && state.editor.path === path) {
+      await loadNoteIntoEditor(path);
+    }
+  } catch (error) {
+    setButtonBusy(btn, false, STRINGS.historyRestoring, STRINGS.historyRestore);
+    showErrorToast(error);
+  }
+}
+
+function closeHistoryModal() {
+  els.historyModal.hidden = true;
+  els.historyList.textContent = '';
+  els.historyPending.hidden = true;
+  state.historySeq = (state.historySeq ?? 0) + 1; // invalidate in-flight loads
+}
+
+els.historyClose.addEventListener('click', closeHistoryModal);
+els.historyBackdrop.addEventListener('click', closeHistoryModal);
 
 // ---------------------------------------------------------------------------
 // Move / rename sheet: pick the destination folder from the vault index or

@@ -159,6 +159,20 @@ export function deleteNote(path, commitMessage) {
   });
 }
 
+// Version history: every edit is a commit, so history is the commit list of
+// the file; restoring queues a save op with the old content (a new commit).
+export function listNoteHistory(path) {
+  return request('GET', '/api/notes/history', { params: { path } });
+}
+
+export function getNoteVersion(path, sha) {
+  return request('GET', '/api/notes/history/content', { params: { path, sha } });
+}
+
+export function restoreNoteVersion(path, sha) {
+  return request('POST', '/api/notes/history/restore', { body: { path, sha } });
+}
+
 export function searchNotes(query) {
   return request('GET', '/api/notes/search', { params: { query } });
 }

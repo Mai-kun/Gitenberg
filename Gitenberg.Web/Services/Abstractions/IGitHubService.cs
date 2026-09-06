@@ -8,6 +8,18 @@ public interface IGitHubService
     public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null);
     public Task<string> GetNoteContentAsync(GitHubRepositoryContext context, string path);
 
+    /// <summary>
+    /// Lists the commits that touched the file at the given path (version history).
+    /// Newest first, capped at 50 entries.
+    /// </summary>
+    public Task<IReadOnlyList<NoteCommitInfo>> GetCommitHistoryAsync(GitHubRepositoryContext context, string path);
+
+    /// <summary>
+    /// Reads the file content as it was at the given commit. Throws NotFoundException
+    /// when the file did not exist at that commit.
+    /// </summary>
+    public Task<string> GetNoteContentAtCommitAsync(GitHubRepositoryContext context, string path, string sha);
+
     public Task CreateOrUpdateNoteAsync(
         GitHubRepositoryContext context,
         string path,

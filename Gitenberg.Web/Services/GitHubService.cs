@@ -71,6 +71,78 @@ public class GitHubService : IGitHubService
         return file.Content;
     }
 
+    public async Task<IReadOnlyList<NoteCommitInfo>> GetCommitHistoryAsync(
+        GitHubRepositoryContext context,
+        string path
+    )
+    {
+        var client = ResolveClient(context.Token);
+
+        // GitHub returns an empty history for paths with a leading slash.
+        var cleanPath = path.Trim('/');
+        var commits = await client.Repository.Commit.GetAll(
+            context.Owner,
+            context.Repo,
+            new CommitRequest { Path = cleanPath },
+            new ApiOptions { PageSize = 50 }
+        );
+
+        var result = new List<NoteCommitInfo>(commits.Count);
+        foreach (var commit in commits)
+        {
+            var info = commit.Commit;
+            var authorInfo = info?.Author;
+            result.Add(new NoteCommitInfo(
+                commit.Sha,
+                authorInfo?.Name,
+                commit.Author?.Login,
+                commit.Author?.AvatarUrl,
+                authorInfo?.Date ?? DateTimeOffset.MinValue,
+                info?.Message ?? string.Empty
+            ));
+        }
+
+        return result;
+    }
+
+    public async Task<string> GetNoteContentAtCommitAsync(
+        GitHubRepositoryContext context,
+        string path,
+        string sha
+    )
+    {
+        var client = ResolveClient(context.Token);
+        var cleanPath = path.Trim('/');
+
+        var contents = await client.Repository.Content.GetAllContentsByRef(
+            context.Owner,
+            context.Repo,
+            cleanPath,
+            sha
+        );
+
+        // The file may be absent at this commit (deleted, or renamed into the path later).
+        if (contents is null || contents.Count == 0)
+        {
+            throw new NotFoundException(
+                $"File '{cleanPath}' not found at commit {sha}.",
+                System.Net.HttpStatusCode.NotFound
+            );
+        }
+
+        var file = contents[0];
+
+        // Content is omitted for files > 1 MB — fall back to the blob API.
+        var content = file.Content;
+        if (string.IsNullOrEmpty(content))
+        {
+            var blob = await client.Git.Blob.Get(context.Owner, context.Repo, file.Sha);
+            content = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(blob.Content));
+        }
+
+        return content;
+    }
+
     public async Task CreateOrUpdateNoteAsync(
         GitHubRepositoryContext context,
         string path,
