@@ -57,6 +57,9 @@
 - 🤖 **Telegram-бот** с командой `/start` и кнопкой запуска Mini App;
 - ✅ **Аутентификация через `initData`** — запросы API валидируются по подписи Telegram (HMAC), GitHub-токен пользователя шифруется через ASP.NET Data Protection.
 
+### Наблюдаемость
+- 📊 **Централизованное логирование в [Seq](https://datalust.co/seq)** — структурированные логи приложения и HTTP-запросов (Serilog), UI Seq поднимается вместе с приложением через docker compose.
+
 ## Технологии
 
 | Слой | Технологии |
@@ -66,7 +69,7 @@
 | Поиск | SQLite FTS5 |
 | Фронтенд | Vanilla JS (ES-модули), EasyMDE, highlight.js, Telegram WebApp SDK |
 | Тесты | xUnit |
-| Инфраструктура | Docker, docker compose, ASP.NET Data Protection |
+| Инфраструктура | Docker, docker compose, ASP.NET Data Protection, Serilog + Seq |
 
 ## Структура проекта
 
@@ -136,6 +139,10 @@ dotnet run --project Gitenberg.Web
 |---|---|---|
 | `IndexingIntervalMinutes` | `60` | Период фоновой переиндексации заметок всех пользователей в минутах. |
 
+### Секция `Serilog` (логирование)
+
+Логи пишутся в консоль и в Seq (sink `Serilog.Sinks.Seq`). Адрес Seq-сервера задаётся в `appsettings.json` (`Serilog:WriteTo:Seq:Args:serverUrl`) или переменной окружения `Serilog__WriteTo__Seq__Args__serverUrl` (в compose по умолчанию `http://seq:5341`). Если Seq недоступен, приложение продолжает работать, логи пишутся в консоль.
+
 ### Docker (.env)
 
 Для `docker compose` скопируйте `.env.example` в `.env` рядом с `docker-compose.yml`:
@@ -144,6 +151,10 @@ dotnet run --project Gitenberg.Web
 TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN
 TELEGRAM_HOST_ADDRESS=https://your-domain.example
 TELEGRAM_SECRET_TOKEN=your_secret_token_here
+
+# Seq (опционально)
+SEQ_URL=http://seq:5341          # адрес Seq внутри compose-сети
+SEQ_ADMIN_PASSWORD=              # пароль (мин. 8 символов) для UI Seq; пусто — доступ без аутентификации
 ```
 
 ## Развёртывание через Docker
@@ -153,10 +164,16 @@ cp .env.example .env    # заполните реальными значения
 docker compose up -d --build
 ```
 
-Приложение будет доступно на порту `8080`. compose-файл монтирует два персистентных тома:
+compose поднимает два сервиса:
+
+- **gitenberg-web** — приложение, доступно на порту `8080`;
+- **seq** — сервер логов (Serilog-приёмник), UI доступен на `http://localhost:8081`, приём логов — порт `5341`.
+
+Персистентные тома:
 
 - `./data` — база SQLite (`/app/data/gitenberg.db`);
-- `./keys` — ключи Data Protection (`/app/keys`).
+- `./keys` — ключи Data Protection (`/app/keys`);
+- `./seq-data` — данные Seq (`/data`).
 
 > ⚠️ Telegram Mini App требует **HTTPS**. Поместите контейнер за обратным прокси с TLS (nginx, Caddy, Traefik) и укажите этот адрес в `TELEGRAM_HOST_ADDRESS`.
 

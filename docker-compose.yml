@@ -10,11 +10,29 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Data Source=/app/data/gitenberg.db
       - DataProtection__KeysPath=/app/keys
+      
       # Values are read from the .env file next to this compose file (see .env.example).
       - TelegramBot__BotToken=${TELEGRAM_BOT_TOKEN:-}
       - TelegramBot__HostAddress=${TELEGRAM_HOST_ADDRESS:-}
       - TelegramBot__SecretToken=${TELEGRAM_SECRET_TOKEN:-}
+      - Serilog__WriteTo__Seq__Args__serverUrl=${SEQ_URL:-http://seq:5341}
     volumes:
       - ./data:/app/data
       - ./keys:/app/keys
+    depends_on:
+      - seq
+    restart: unless-stopped
+
+  seq:
+    image: datalust/seq:latest
+    container_name: gitenberg-seq
+    environment:
+      - ACCEPT_EULA=Y
+      # Optional admin password; if empty, Seq UI is accessible without authentication.
+      - SEQ_FIRSTRUN_ADMINPASSWORD=${SEQ_ADMIN_PASSWORD:-}
+    ports:
+      - "5341:5341"
+      - "8081:80"
+    volumes:
+      - ./seq-data:/data
     restart: unless-stopped

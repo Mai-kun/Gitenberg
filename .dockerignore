@@ -17,6 +17,5 @@ Gitenberg.Tests/
 .idea/
 .vscode/
 .zcode/
-.aider.*
 *.user
 *.slnx

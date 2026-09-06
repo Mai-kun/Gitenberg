@@ -57,6 +57,9 @@ Notes are stored as plain `.md` files in your repository: no proprietary formats
 - 🤖 **Telegram bot** with a `/start` command and a Mini App launch button;
 - ✅ **Authentication via `initData`** — API requests are validated against the Telegram signature (HMAC); each user's GitHub token is encrypted with ASP.NET Data Protection.
 
+### Observability
+- 📊 **Centralized logging to [Seq](https://datalust.co/seq)** — structured application and HTTP request logs (Serilog); the Seq UI is brought up alongside the app via docker compose.
+
 ## Tech Stack
 
 | Layer | Technologies |
@@ -66,7 +69,7 @@ Notes are stored as plain `.md` files in your repository: no proprietary formats
 | Search | SQLite FTS5 |
 | Frontend | Vanilla JS (ES modules), EasyMDE, highlight.js, Telegram WebApp SDK |
 | Tests | xUnit |
-| Infrastructure | Docker, docker compose, ASP.NET Data Protection |
+| Infrastructure | Docker, docker compose, ASP.NET Data Protection, Serilog + Seq |
 
 ## Project Structure
 
@@ -136,6 +139,10 @@ All settings are read from the standard ASP.NET Core configuration (`appsettings
 |---|---|---|
 | `IndexingIntervalMinutes` | `60` | Background re-indexing period (in minutes) for all users' notes. |
 
+### `Serilog` section (logging)
+
+Logs are written to the console and to Seq (`Serilog.Sinks.Seq` sink). The Seq server address is set in `appsettings.json` (`Serilog:WriteTo:Seq:Args:serverUrl`) or via the `Serilog__WriteTo__Seq__Args__serverUrl` environment variable (defaults to `http://seq:5341` in compose). If Seq is unreachable, the app keeps running and logs to the console.
+
 ### Docker (.env)
 
 For `docker compose`, copy `.env.example` to `.env` next to `docker-compose.yml`:
@@ -144,6 +151,10 @@ For `docker compose`, copy `.env.example` to `.env` next to `docker-compose.yml`
 TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN
 TELEGRAM_HOST_ADDRESS=https://your-domain.example
 TELEGRAM_SECRET_TOKEN=your_secret_token_here
+
+# Seq (optional)
+SEQ_URL=http://seq:5341          # Seq address inside the compose network
+SEQ_ADMIN_PASSWORD=              # UI password (min 8 chars); leave empty for anonymous access
 ```
 
 ## Docker Deployment
@@ -153,10 +164,16 @@ cp .env.example .env    # fill in real values
 docker compose up -d --build
 ```
 
-The application is available on port `8080`. The compose file mounts two persistent volumes:
+Compose starts two services:
+
+- **gitenberg-web** — the application, available on port `8080`;
+- **seq** — log server (Serilog sink), UI at `http://localhost:8081`, log ingestion on port `5341`.
+
+Persistent volumes:
 
 - `./data` — SQLite database (`/app/data/gitenberg.db`);
-- `./keys` — Data Protection keys (`/app/keys`).
+- `./keys` — Data Protection keys (`/app/keys`);
+- `./seq-data` — Seq data (`/data`).
 
 > ⚠️ Telegram Mini App requires **HTTPS**. Put the container behind a TLS-terminating reverse proxy (nginx, Caddy, Traefik) and specify that address in `TELEGRAM_HOST_ADDRESS`.
 

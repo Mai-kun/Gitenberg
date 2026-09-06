@@ -10,9 +10,20 @@ using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Bootstrap logger: enough to report startup failures before configuration is fully loaded.
+Log.Logger = new LoggerConfiguration()
+        .ReadFrom.Configuration(builder.Configuration)
+        .CreateBootstrapLogger();
+
+builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext());
 
 builder.Services.AddOpenApi();
 
@@ -94,4 +105,17 @@ app.MapSearchEndpoints();
 app.MapSyncEndpoints();
 
 app.UseHttpsRedirection();
-app.Run();
+app.UseSerilogRequestLogging();
+
+try
+{
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
