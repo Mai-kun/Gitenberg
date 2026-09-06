@@ -1,6 +1,6 @@
 # Gitenberg
 
-**English** | [Русский](README.en.md)
+**Русский** | [English](README.en.md)
 
 ## Содержание
 
