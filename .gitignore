@@ -488,10 +488,9 @@ Gitenberg.Web/Gitenberg.Web.http
 Gitenberg.Web/gitenberg.db-shm
 Gitenberg.Web/gitenberg.db-wal
 AGENT.md
-.aider*
 .zcode
 Gitenberg.Web/appsettings.Development.json
 data/
 keys/
 temp-keys/
-.roo/commands/
+seq-data/

@@ -13,6 +13,8 @@ public class MockGitHubService : IGitHubService
     public Func<GitHubRepositoryContext, string, string, string?, string, Task>? MoveNoteFunc { get; set; }
     public Func<GitHubRepositoryContext, string, byte[], string, Task>? UploadBinaryFileFunc { get; set; }
     public List<(string Path, byte[] Content, string CommitMessage)> UploadedBinaries { get; } = new();
+    public Func<GitHubRepositoryContext, string?, Task<byte[]>>? GetRepositoryArchiveFunc { get; set; }
+    public List<(GitHubRepositoryContext Context, string? Reference)> ArchiveRequests { get; } = new();
 
     public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null)
     {
@@ -71,5 +73,13 @@ public class MockGitHubService : IGitHubService
         return UploadBinaryFileFunc != null
             ? UploadBinaryFileFunc(context, path, contentBytes, commitMessage)
             : Task.CompletedTask;
+    }
+
+    public Task<byte[]> GetRepositoryArchiveAsync(GitHubRepositoryContext context, string? reference = null)
+    {
+        ArchiveRequests.Add((context, reference));
+        return GetRepositoryArchiveFunc != null
+            ? GetRepositoryArchiveFunc(context, reference)
+            : Task.FromResult(Array.Empty<byte>());
     }
 }

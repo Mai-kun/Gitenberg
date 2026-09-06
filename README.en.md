@@ -47,7 +47,8 @@ Notes are stored as plain `.md` files in your repository: no proprietary formats
 ### Storage and Sync
 - 🔐 **Your GitHub repository** — notes are committed via the GitHub Contents API ([Octokit](https://github.com/octokit/octokit.net)) on your behalf, with meaningful commit messages;
 - 📴 **Offline-first sync** — every change (create, edit, delete, move) is first written to a local SQLite queue and then flushed to GitHub in the background. Listings and note content render pending operations as an overlay, so the UI is always consistent with the local state;
-- 🔄 **Manual sync** — a header button with an indicator of failed operations.
+- 🔄 **Manual sync** — a header button with an indicator of failed operations;
+- 📦 **Storage export** — download a ZIP archive of the whole repository (all notes and attachments) from Settings, built on the fly via the GitHub API.
 
 ### Search
 - 🔍 **Full-text search** across all notes powered by SQLite **FTS5**;
@@ -155,6 +156,7 @@ TELEGRAM_SECRET_TOKEN=your_secret_token_here
 # Seq (optional)
 SEQ_URL=http://seq:5341          # Seq address inside the compose network
 SEQ_ADMIN_PASSWORD=              # UI password (min 8 chars); leave empty for anonymous access
+SEQ_NO_AUTHENTICATION=true       # disable Seq authentication; set to false if SEQ_ADMIN_PASSWORD is provided
 ```
 
 ## Docker Deployment
@@ -212,6 +214,7 @@ All endpoints require Telegram authentication (`initData` in the header/request 
 | `/api/notes/move` | `POST` | Move a note (rename / change folder). |
 | `/api/notes/search` | `GET` | Full-text search (FTS5). |
 | `/api/sync` | `POST`, `GET` | Force-flush the pending operation queue, sync status. |
+| `/api/export/archive` | `GET` | ZIP archive of the entire notes repository (storage export). |
 | `/api/bot/*` | `POST` | Telegram webhook (protected by `secret_token`). |
 
 ## Tests

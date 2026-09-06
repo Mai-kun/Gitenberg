@@ -31,4 +31,10 @@ public interface IGitHubService
         byte[] contentBytes,
         string commitMessage
     );
+
+    /// <summary>
+    /// Downloads a ZIP archive of the entire repository at the given reference
+    /// (branch/tag/SHA). Null reference means the default branch.
+    /// </summary>
+    public Task<byte[]> GetRepositoryArchiveAsync(GitHubRepositoryContext context, string? reference = null);
 }

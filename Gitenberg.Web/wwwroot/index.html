@@ -209,6 +209,13 @@
           </select>
         </div>
       </div>
+      <div class="settings-divider" aria-hidden="true"></div>
+      <h2 class="settings-section-title" data-i18n="exportTitle">Экспорт хранилища</h2>
+      <p class="settings-hint" data-i18n="exportHint">Скачайте ZIP-архив всего хранилища: все заметки и вложения из репозитория GitHub.</p>
+      <button id="btn-export" type="button" class="btn btn-secondary export-btn">
+        <span class="btn-label" data-i18n="exportBtnIdle">Скачать ZIP-архив</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
       <div id="settings-error" class="error-text" hidden></div>
       <button id="settings-save" type="button" class="btn btn-primary" data-i18n="saveAction">Сохранить</button>
     </div>

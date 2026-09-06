@@ -28,8 +28,9 @@ services:
     container_name: gitenberg-seq
     environment:
       - ACCEPT_EULA=Y
-      # Optional admin password; if empty, Seq UI is accessible without authentication.
+      # Если SEQ_ADMIN_PASSWORD задан, установите SEQ_NO_AUTHENTICATION=false.
       - SEQ_FIRSTRUN_ADMINPASSWORD=${SEQ_ADMIN_PASSWORD:-}
+      - SEQ_FIRSTRUN_NOAUTHENTICATION=${SEQ_NO_AUTHENTICATION:-true}
     ports:
       - "5341:5341"
       - "8081:80"

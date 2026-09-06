@@ -1130,6 +1130,36 @@ input, textarea {
   margin-top: 1px;
 }
 
+.settings-divider {
+  height: 1px;
+  background: var(--tg-section-sep);
+  margin: 4px 0 14px;
+}
+
+.settings-section-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.export-btn {
+  align-self: stretch;
+}
+
+.export-btn:disabled { opacity: 0.7; }
+
+.export-btn .spinner {
+  display: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-rotate 0.7s linear infinite;
+}
+
+.export-btn.busy .spinner { display: inline-block; }
+.export-btn.busy .btn-label { display: none; }
+
 .sync-badge {
   position: absolute;
   top: 2px;

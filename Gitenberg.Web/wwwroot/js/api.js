@@ -186,3 +186,29 @@ export function saveSettings({ githubToken, repositoryOwner, repositoryName, inb
     },
   });
 }
+
+// Binary download — request() assumes JSON, so this is a separate code path.
+// Returns { blob, fileName } with the server-provided file name when present.
+export async function downloadExportArchive() {
+  const response = await fetch(buildUrl('/api/export/archive'), {
+    headers: authHeaders(),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await extractError(response));
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+  let fileName = 'gitenberg-export.zip';
+  if (match) {
+    try {
+      fileName = decodeURIComponent(match[1]);
+    } catch {
+      fileName = match[1];
+    }
+  }
+  return { blob, fileName };
+}

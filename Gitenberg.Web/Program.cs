@@ -1,4 +1,5 @@
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Export;
 using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Registration;
 using Gitenberg.Web.Features.Search;
@@ -103,6 +104,7 @@ app.MapRegistrationEndpoints();
 app.MapBotEndpoints();
 app.MapSearchEndpoints();
 app.MapSyncEndpoints();
+app.MapExportEndpoints();
 
 app.UseHttpsRedirection();
 app.UseSerilogRequestLogging();

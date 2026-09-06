@@ -194,6 +194,7 @@ const els = {
   settingsAutosync: $('settings-autosync'),
   settingsError: $('settings-error'),
   settingsSave: $('settings-save'),
+  btnExport: $('btn-export'),
   settingsBack: $('btn-settings-back'),
   settingsAutosyncInterval: $('settings-autosync-interval'),
   autosyncIntervalField: $('autosync-interval-field'),
@@ -1358,6 +1359,35 @@ els.settingsBack.addEventListener('click', () => void enterExplorer(state.curren
 els.settingsAutosync.addEventListener('change', () => {
   els.autosyncIntervalField.hidden = !els.settingsAutosync.checked;
 });
+
+// Export: download a ZIP of the whole repository via the backend.
+async function exportArchive() {
+  const btn = els.btnExport;
+  if (btn.classList.contains('busy')) return;
+  btn.disabled = true;
+  btn.classList.add('busy');
+  try {
+    const { blob, fileName } = await api.downloadExportArchive();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    haptic('success');
+    showToast(STRINGS.exportSuccess);
+  } catch (error) {
+    haptic('error');
+    showErrorToast(error);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('busy');
+  }
+}
+
+els.btnExport.addEventListener('click', () => void exportArchive());
 
 let syncBadgeTimer = null;
 async function refreshSyncBadge() {

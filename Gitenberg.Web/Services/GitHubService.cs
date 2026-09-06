@@ -285,6 +285,12 @@ public class GitHubService : IGitHubService
         await client.Repository.Content.CreateFile(context.Owner, context.Repo, path, request);
     }
 
+    public async Task<byte[]> GetRepositoryArchiveAsync(GitHubRepositoryContext context, string? reference = null)
+    {
+        var client = ResolveClient(context.Token);
+        return await client.Repository.Content.GetArchive(context.Owner, context.Repo, ArchiveFormat.Zipball, reference ?? "");
+    }
+
     private static GitHubClient CreateClient(string token)
     {
         return new GitHubClient(new ProductHeaderValue("Gitenberg"))
