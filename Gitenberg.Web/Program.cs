@@ -10,7 +10,6 @@ using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Scalar.AspNetCore;
 using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,8 +36,7 @@ var botConfig = builder.Configuration
                         .Get<BotConfiguration>()
                 ?? new BotConfiguration();
 builder.Services.AddSingleton(botConfig);
-// TelegramBotClient throws on an empty token, which would crash the host on startup —
-// only wire the client and webhook registration when the bot is actually configured.
+
 if (!string.IsNullOrWhiteSpace(botConfig.BotToken))
 {
     builder.Services.AddHttpClient("tgwebhook")
@@ -73,12 +71,6 @@ using (var scope = app.Services.CreateScope())
     db.Database.EnsureCreated();
     db.EnsureFtsTableCreated();
     PendingSyncService.EnsureTableCreated(db);
-}
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapScalarApiReference("/api");
 }
 
 app.UseDefaultFiles();
