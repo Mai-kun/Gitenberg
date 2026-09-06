@@ -42,7 +42,7 @@ public static class HistoryEndpoints
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
-        ITokenEncryptionService encryptionService,
+        IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
         PendingSyncService pendingSync,
         HttpContext? httpContext = null
@@ -71,18 +71,16 @@ public static class HistoryEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
+        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        if (repository == null)
         {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
+            return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
-
-        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
         IReadOnlyList<NoteCommitInfo> commits;
         try
         {
-            commits = await gitHubService.GetCommitHistoryAsync(context, path);
+            commits = await gitHubService.GetCommitHistoryAsync(repository.Context, path);
         }
         catch (NotFoundException)
         {
@@ -91,7 +89,7 @@ public static class HistoryEndpoints
 
         // Remote history does not include unsynced local changes; the UI shows
         // a warning instead of silently hiding them.
-        var ops = await pendingSync.GetOpsAsync(telegramId.Value);
+        var ops = await pendingSync.GetOpsAsync(telegramId.Value, repository.RepositoryId);
         var overlay = pendingSync.GetContentOverlay(ops, path.Trim('/'));
         var hasPendingChanges = overlay.Found || overlay.Deleted;
 
@@ -104,7 +102,7 @@ public static class HistoryEndpoints
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
-        ITokenEncryptionService encryptionService,
+        IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
         HttpContext? httpContext = null
     )
@@ -137,18 +135,16 @@ public static class HistoryEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
+        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        if (repository == null)
         {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
+            return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
-
-        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
         string content;
         try
         {
-            content = await gitHubService.GetNoteContentAtCommitAsync(context, path, sha);
+            content = await gitHubService.GetNoteContentAtCommitAsync(repository.Context, path, sha);
         }
         catch (NotFoundException)
         {
@@ -165,10 +161,11 @@ public static class HistoryEndpoints
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
-        ITokenEncryptionService encryptionService,
+        IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
         PendingSyncService pendingSync,
         IMemoryCache memoryCache,
+        Reminders.ReminderService reminderService,
         HttpContext? httpContext = null
     )
     {
@@ -197,18 +194,16 @@ public static class HistoryEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
+        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        if (repository == null)
         {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
+            return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
-
-        var decryptedToken = encryptionService.DecryptToken(user.GitHubToken);
-        var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
 
         string content;
         try
         {
-            content = await gitHubService.GetNoteContentAtCommitAsync(context, request.Path, request.Sha);
+            content = await gitHubService.GetNoteContentAtCommitAsync(repository.Context, request.Path, request.Sha);
         }
         catch (NotFoundException)
         {
@@ -221,10 +216,11 @@ public static class HistoryEndpoints
         var shortSha = request.Sha.Length >= 7 ? request.Sha[..7] : request.Sha;
         var cleanPath = request.Path.Trim('/');
         var commitMessage = $"Restore note: {cleanPath} (← {shortSha})";
-
         // Local-first: restoring is a regular save op, pushed to GitHub by sync.
-        await pendingSync.EnqueueAsync(telegramId.Value, "save", request.Path, null, content, commitMessage);
-        NotesEndpoints.BustUserCache(memoryCache, telegramId.Value);
+        await pendingSync.EnqueueAsync(telegramId.Value, repository.RepositoryId, "save", request.Path, null, content, commitMessage);
+        NotesEndpoints.BustUserCache(memoryCache, telegramId.Value, repository.RepositoryId);
+        // Restored content may add or remove "@remind" markers — reconcile.
+        await reminderService.UpsertForNoteAsync(telegramId.Value, repository.RepositoryId, request.Path, content);
 
         return Results.Ok(
             new

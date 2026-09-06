@@ -6,12 +6,14 @@ using FluentAssertions;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Export;
 using Gitenberg.Web.Services;
+using Gitenberg.Web.Services.Abstractions;
 using Gitenberg.Tests.Mocks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 using User = Gitenberg.Web.Models.User;
 
@@ -42,16 +44,34 @@ public class ExportEndpointsTests
         return dbContext;
     }
 
+    private IRepositoryContextResolver CreateResolver(AppDbContext db) =>
+        new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance);
+
     private async Task<AppDbContext> CreateDbContextWithUserAsync(long telegramId, string? githubToken)
     {
         var db = CreateInMemoryDbContext();
-        db.Users.Add(new User
+        var user = new User
         {
             TelegramId = telegramId,
-            GitHubToken = githubToken is null ? null : _encryptionService.EncryptToken(githubToken, TimeSpan.FromMinutes(10)),
+            CreatedAt = DateTime.UtcNow,
+            LastActivityAt = DateTime.UtcNow,
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var repository = new Gitenberg.Web.Models.Repository
+        {
+            TelegramUserId = telegramId,
+            DisplayName = "owner/my-notes",
             RepositoryOwner = "owner",
             RepositoryName = "my-notes",
-        });
+            GitHubToken = githubToken is null ? null : _encryptionService.EncryptToken(githubToken, TimeSpan.FromMinutes(10)),
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Repositories.Add(repository);
+        await db.SaveChangesAsync();
+
+        user.SelectedRepositoryId = repository.Id;
         await db.SaveChangesAsync();
         return db;
     }
@@ -64,7 +84,7 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            null, null, null, db, _gitHubService, _encryptionService);
+            null, null, null, db, _gitHubService, CreateResolver(db));
 
         // Assert
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -79,7 +99,7 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            12345, null, null, db, _gitHubService, _encryptionService);
+            12345, null, null, db, _gitHubService, CreateResolver(db));
 
         // Assert
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -94,7 +114,7 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            12345, null, null, db, _gitHubService, _encryptionService);
+            12345, null, null, db, _gitHubService, CreateResolver(db));
 
         // Assert
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -111,7 +131,7 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            12345, null, null, db, _gitHubService, _encryptionService);
+            12345, null, null, db, _gitHubService, CreateResolver(db));
 
         // Assert
         var fileResult = result.Should().BeAssignableTo<FileContentHttpResult>().Subject;

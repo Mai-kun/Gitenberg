@@ -7,6 +7,8 @@ using FluentAssertions;
 using Gitenberg.Tests.Infrastructure.FakeClasses;
 using Gitenberg.Tests.Mocks;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Activity;
+using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Models;
@@ -44,6 +46,8 @@ public class QuickCaptureTests
 
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
+        ActivityService.EnsureTableCreated(dbContext);
+        ReminderService.EnsureTableCreated(dbContext);
         return dbContext;
     }
 
@@ -54,11 +58,14 @@ public class QuickCaptureTests
     )
     {
         var botConfig = new BotConfiguration { HostAddress = "https://example.com" };
+        var reminderService = new ReminderService(dbContext);
+        var activityService = new ActivityService(dbContext);
         var inlineSearchHandler = new InlineSearchHandler(
             botClient,
             dbContext,
             botConfig,
-            new NoteIndexer(dbContext, gitHubService, _encryptionService, new FakeLogger<NoteIndexer>()),
+            new RepositoryContextResolver(dbContext, _encryptionService, new FakeLogger<RepositoryContextResolver>()),
+            new NoteIndexer(dbContext, gitHubService, _encryptionService, reminderService, new FakeLogger<NoteIndexer>()),
             new InlineFileLinkService(botConfig),
             new FakeLogger<InlineSearchHandler>()
         );
@@ -67,8 +74,10 @@ public class QuickCaptureTests
             dbContext,
             botConfig,
             gitHubService,
-            _encryptionService,
+            new RepositoryContextResolver(dbContext, _encryptionService, new FakeLogger<RepositoryContextResolver>()),
             inlineSearchHandler,
+            reminderService,
+            activityService,
             new FakeLogger<UpdateHandler>()
         );
     }
@@ -76,17 +85,30 @@ public class QuickCaptureTests
     private async Task<AppDbContext> CreateRegisteredUserAsync(string inboxPath = "inbox", string attachmentsPath = "inbox/attachments")
     {
         var db = CreateInMemoryDbContext();
-        db.Users.Add(new AppUser
+        var user = new AppUser
         {
             TelegramId = 42,
-            GitHubToken = _encryptionService.EncryptToken("github_token", TimeSpan.FromDays(1)),
+            CreatedAt = DateTime.UtcNow,
+            LastActivityAt = DateTime.UtcNow,
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var repository = new Gitenberg.Web.Models.Repository
+        {
+            TelegramUserId = 42,
+            DisplayName = "octocat/my-notes",
             RepositoryOwner = "octocat",
             RepositoryName = "my-notes",
+            GitHubToken = _encryptionService.EncryptToken("github_token", TimeSpan.FromDays(1)),
             InboxPath = inboxPath,
             AttachmentsPath = attachmentsPath,
             CreatedAt = DateTime.UtcNow,
-            LastActivityAt = DateTime.UtcNow,
-        });
+        };
+        db.Repositories.Add(repository);
+        await db.SaveChangesAsync();
+
+        user.SelectedRepositoryId = repository.Id;
         await db.SaveChangesAsync();
         return db;
     }

@@ -1,9 +1,13 @@
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Activity;
 using Gitenberg.Web.Features.Export;
 using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Registration;
+using Gitenberg.Web.Features.Reminders;
+using Gitenberg.Web.Features.Repositories;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.Sync;
+using Gitenberg.Web.Features.Tasks;
 using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Infrastructure;
@@ -40,6 +44,7 @@ builder.Services.AddDataProtection()
         .SetApplicationName("GitenbergApp");
 builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
 builder.Services.AddScoped<IGitHubService, GitHubService>();
+builder.Services.AddScoped<IRepositoryContextResolver, RepositoryContextResolver>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -54,9 +59,13 @@ if (!string.IsNullOrWhiteSpace(botConfig.BotToken))
     builder.Services.AddHttpClient("tgwebhook")
             .AddTypedClient<ITelegramBotClient>((httpClient, sp) => new TelegramBotClient(botConfig.BotToken, httpClient));
     builder.Services.AddHostedService<ConfigureWebhook>();
+    builder.Services.AddSingleton<BotIdentityService>();
+    builder.Services.AddHostedService<ReminderDispatchService>();
 }
 builder.Services.AddScoped<UpdateHandler>();
 builder.Services.AddScoped<InlineSearchHandler>();
+builder.Services.AddScoped<ReminderService>();
+builder.Services.AddScoped<ActivityService>();
 builder.Services.AddSingleton<InlineFileLinkService>();
 builder.Services.AddSingleton<ITelegramAuthValidator>(_ => new TelegramAuthValidator(botConfig.BotToken));
 
@@ -86,6 +95,10 @@ using (var scope = app.Services.CreateScope())
     db.EnsureFtsTableCreated();
     db.EnsureUserCaptureColumnsCreated();
     PendingSyncService.EnsureTableCreated(db);
+    ReminderService.EnsureTableCreated(db);
+    ActivityService.EnsureTableCreated(db);
+    // Requires the FTS, PendingNoteOps and Reminders tables to exist already.
+    db.EnsureRepositoriesTableCreated();
 }
 
 app.UseDefaultFiles();
@@ -104,10 +117,13 @@ app.UseStaticFiles(new StaticFileOptions
 app.MapNotesEndpoints();
 app.MapHistoryEndpoints();
 app.MapRegistrationEndpoints();
+app.MapRepositoriesEndpoints();
 app.MapBotEndpoints();
 app.MapSearchEndpoints();
 app.MapSyncEndpoints();
 app.MapExportEndpoints();
+app.MapActivityEndpoints();
+app.MapTasksEndpoints();
 
 app.UseHttpsRedirection();
 app.UseSerilogRequestLogging();

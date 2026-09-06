@@ -90,6 +90,39 @@
       </button>
     </header>
 
+    <!-- Root-only switch between the notes explorer and the aggregated checklist -->
+    <nav id="explorer-tabs" class="explorer-tabs" hidden>
+      <button id="tab-notes" type="button" class="explorer-tab is-active">
+        <span data-i18n="notesTab">Заметки</span>
+      </button>
+      <button id="tab-tasks" type="button" class="explorer-tab">
+        <span data-i18n="tasksTab">Задачи</span>
+        <span id="tasks-tab-count" class="tab-count" hidden></span>
+      </button>
+    </nav>
+
+    <!-- Activity heatmap (GitHub contribution style), root level only -->
+    <section id="activity-card" class="activity-card" hidden>
+      <button id="activity-toggle" type="button" class="activity-toggle" aria-expanded="false">
+        <span id="activity-summary" class="activity-summary"></span>
+        <span id="activity-chevron" class="activity-chevron" aria-hidden="true">▾</span>
+      </button>
+      <div id="activity-body" class="activity-body" hidden>
+        <div id="heatmap-scroll" class="heatmap-scroll">
+          <div id="heatmap-grid" class="heatmap-grid"></div>
+        </div>
+        <div class="heatmap-legend">
+          <span data-i18n="activityLess">Меньше</span>
+          <span class="heatmap-cell level-0"></span>
+          <span class="heatmap-cell level-1"></span>
+          <span class="heatmap-cell level-2"></span>
+          <span class="heatmap-cell level-3"></span>
+          <span class="heatmap-cell level-4"></span>
+          <span data-i18n="activityMore">Больше</span>
+        </div>
+      </div>
+    </section>
+
     <nav id="breadcrumbs" class="breadcrumbs" aria-label="Путь"></nav>
 
     <div class="search-wrap">
@@ -110,6 +143,13 @@
     <div id="explorer-status" class="status-text" hidden></div>
 
     <main id="notes-list" class="notes-list" role="list"></main>
+
+    <!-- Tasks tab: all markdown checkboxes aggregated into one checklist -->
+    <div id="tasks-toolbar" class="tasks-toolbar" hidden>
+      <button id="tasks-filter-active" type="button" class="filter-chip is-active" data-i18n="filterActive">Активные</button>
+      <button id="tasks-filter-all" type="button" class="filter-chip" data-i18n="filterAll">Все</button>
+    </div>
+    <main id="tasks-list" class="tasks-list" hidden></main>
 
     <button id="fab-create" class="fab" data-i18n-title="createNote" aria-label="Создать заметку">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -168,6 +208,19 @@
       <h1 data-i18n="settingsTitle">Настройки</h1>
     </header>
     <div class="settings-body">
+      <h2 class="settings-section-title" data-i18n="repositoriesTitle">Репозитории</h2>
+      <p class="settings-hint" data-i18n="repositoriesHint">Переключайтесь между репозиториями: заметки, поиск и бот работают с активным. Нажмите на репозиторий, чтобы сделать его активным.</p>
+      <div id="repo-list" class="repo-list"></div>
+      <button id="btn-repo-add" type="button" class="btn btn-secondary repo-add-btn">
+        <span class="btn-label" data-i18n="repoAdd">Добавить репозиторий</span>
+      </button>
+
+      <div class="settings-divider" aria-hidden="true"></div>
+      <h2 id="repo-form-title" class="settings-section-title" data-i18n="repoEditTitle">Активный репозиторий</h2>
+      <div class="field">
+        <label for="settings-repo-name" data-i18n="repoNameLabel">Название</label>
+        <input id="settings-repo-name" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="repoNamePlaceholder" placeholder="Личное">
+      </div>
       <div class="field">
         <label for="settings-owner" data-i18n="regOwner">Владелец репозитория</label>
         <input id="settings-owner" type="text" autocomplete="off" spellcheck="false">
@@ -187,6 +240,10 @@
       <div class="field">
         <label for="settings-attachments-path" data-i18n="attachmentsPathLabel">Папка для фото</label>
         <input id="settings-attachments-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="attachmentsPathPlaceholder" placeholder="inbox/attachments">
+      </div>
+      <div id="repo-form-actions" class="repo-form-actions" hidden>
+        <button id="btn-repo-cancel-edit" type="button" class="btn btn-secondary" data-i18n="cancel">Отмена</button>
+        <button id="btn-repo-delete" type="button" class="btn btn-secondary btn-danger-text" data-i18n="repoDelete">Удалить репозиторий</button>
       </div>
       <label class="settings-toggle">
         <input id="settings-autosave" type="checkbox">

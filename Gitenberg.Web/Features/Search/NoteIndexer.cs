@@ -1,33 +1,36 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Octokit;
-using User = Gitenberg.Web.Models.User;
+using Repository = Gitenberg.Web.Models.Repository;
 
 namespace Gitenberg.Web.Features.Search;
 
 /// <summary>
-/// Synchronizes the local FTS5 index with each registered user's GitHub notes.
-/// Only notes whose SHA changed since the last run are downloaded, keeping GitHub API usage minimal.
+/// Synchronizes the local FTS5 note index with every GitHub repository of
+/// every registered user. Only notes whose SHA changed since the last run are
+/// downloaded, keeping GitHub API usage minimal.
 /// </summary>
 public class NoteIndexer(
     AppDbContext dbContext,
     IGitHubService gitHubService,
     ITokenEncryptionService encryptionService,
+    ReminderService reminderService,
     ILogger<NoteIndexer> logger
 )
 {
     public async Task SynchronizeAllUsersAsync(CancellationToken cancellationToken = default)
     {
-        var users = await dbContext.Users.ToListAsync(cancellationToken);
+        var userIds = await dbContext.Users.Select(u => u.TelegramId).ToListAsync(cancellationToken);
 
-        foreach (var user in users)
+        foreach (var telegramId in userIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await SynchronizeUserAsync(user, cancellationToken);
+            await SynchronizeUserRepositoriesAsync(telegramId, targetRepositoryId: null, cancellationToken);
         }
     }
 
@@ -35,26 +38,45 @@ public class NoteIndexer(
     /// Incremental re-index of a single user's notes. Cheap when nothing
     /// changed (one listing; only notes with a new SHA are downloaded), so
     /// search endpoints can call it right before querying to guarantee
-    /// fresh results.
+    /// fresh results. With <paramref name="repositoryId"/> only that
+    /// repository is refreshed; otherwise all of the user's repositories are.
     /// </summary>
-    public async Task SynchronizeUserByIdAsync(long telegramId, CancellationToken cancellationToken = default)
+    public async Task SynchronizeUserByIdAsync(long telegramId, int? repositoryId = null, CancellationToken cancellationToken = default)
     {
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId, cancellationToken);
-        if (user == null) return;
-        await SynchronizeUserAsync(user, cancellationToken);
+        var userExists = await dbContext.Users.AnyAsync(u => u.TelegramId == telegramId, cancellationToken);
+        if (!userExists) return;
+        await SynchronizeUserRepositoriesAsync(telegramId, repositoryId, cancellationToken);
     }
 
-    private async Task SynchronizeUserAsync(User user, CancellationToken cancellationToken)
+    private async Task SynchronizeUserRepositoriesAsync(long telegramId, int? targetRepositoryId, CancellationToken cancellationToken)
+    {
+        var query = dbContext.Repositories.Where(r => r.TelegramUserId == telegramId);
+        if (targetRepositoryId is { } repositoryId)
+        {
+            query = query.Where(r => r.Id == repositoryId);
+        }
+
+        var repositories = await query.OrderBy(r => r.Id).ToListAsync(cancellationToken);
+
+        foreach (var repository in repositories)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await SynchronizeRepositoryAsync(repository, cancellationToken);
+        }
+    }
+
+    private async Task SynchronizeRepositoryAsync(Repository repository, CancellationToken cancellationToken)
     {
         if (
-            string.IsNullOrWhiteSpace(user.GitHubToken)
-            || string.IsNullOrWhiteSpace(user.RepositoryOwner)
-            || string.IsNullOrWhiteSpace(user.RepositoryName)
+            string.IsNullOrWhiteSpace(repository.GitHubToken)
+            || string.IsNullOrWhiteSpace(repository.RepositoryOwner)
+            || string.IsNullOrWhiteSpace(repository.RepositoryName)
         )
         {
             logger.LogWarning(
-                "Skipping indexing for user {TelegramId}: GitHub settings are not fully configured.",
-                user.TelegramId
+                "Skipping indexing for repository {RepositoryId} (user {TelegramId}): GitHub settings are not fully configured.",
+                repository.Id,
+                repository.TelegramUserId
             );
             return;
         }
@@ -63,36 +85,37 @@ public class NoteIndexer(
         try
         {
             context = new GitHubRepositoryContext(
-                encryptionService.DecryptToken(user.GitHubToken),
-                user.RepositoryOwner,
-                user.RepositoryName
+                encryptionService.DecryptToken(repository.GitHubToken),
+                repository.RepositoryOwner,
+                repository.RepositoryName
             );
         }
         catch (CryptographicException)
         {
             logger.LogWarning(
-                "Skipping indexing for user {TelegramId}: GitHub token could not be decrypted.",
-                user.TelegramId
+                "Skipping indexing for repository {RepositoryId} (user {TelegramId}): GitHub token could not be decrypted.",
+                repository.Id,
+                repository.TelegramUserId
             );
             return;
         }
 
         try
         {
-            await SynchronizeUserNotesAsync(user, context, cancellationToken);
+            await SynchronizeRepositoryNotesAsync(repository, context, cancellationToken);
         }
         catch (ApiException ex)
         {
-            logger.LogError(ex, "Failed to fetch notes from GitHub for user {TelegramId}.", user.TelegramId);
+            logger.LogError(ex, "Failed to fetch notes from GitHub for repository {RepositoryId}.", repository.Id);
         }
         catch (DbUpdateException ex)
         {
-            logger.LogError(ex, "Failed to persist the search index for user {TelegramId}.", user.TelegramId);
+            logger.LogError(ex, "Failed to persist the search index for repository {RepositoryId}.", repository.Id);
         }
     }
 
-    private async Task SynchronizeUserNotesAsync(
-        User user,
+    private async Task SynchronizeRepositoryNotesAsync(
+        Repository repository,
         GitHubRepositoryContext context,
         CancellationToken cancellationToken
     )
@@ -127,11 +150,13 @@ public class NoteIndexer(
         }
 
         var localNotes = await dbContext.IndexedNotes
-            .Where(n => n.TelegramUserId == user.TelegramId)
+            .Where(n => n.TelegramUserId == repository.TelegramUserId && n.RepositoryId == repository.Id)
             .ToDictionaryAsync(n => n.NotePath, cancellationToken);
 
-        // FTS5 columns are TEXT; binding the id as a string keeps insert/select comparisons type-consistent.
-        var userId = user.TelegramId.ToString(CultureInfo.InvariantCulture);
+        // FTS5 columns are TEXT; binding the ids as strings keeps insert/select
+        // comparisons type-consistent.
+        var userId = repository.TelegramUserId.ToString(CultureInfo.InvariantCulture);
+        var repositoryId = repository.Id.ToString(CultureInfo.InvariantCulture);
         var updatedCount = 0;
         var removedCount = 0;
 
@@ -151,9 +176,9 @@ public class NoteIndexer(
             {
                 logger.LogError(
                     ex,
-                    "Failed to download note '{NotePath}' for user {TelegramId}.",
+                    "Failed to download note '{NotePath}' for repository {RepositoryId}.",
                     path,
-                    user.TelegramId
+                    repository.Id
                 );
                 continue;
             }
@@ -161,7 +186,7 @@ public class NoteIndexer(
             if (local is null)
             {
                 dbContext.IndexedNotes.Add(
-                    new IndexedNote { TelegramUserId = user.TelegramId, NotePath = path, Sha = sha }
+                    new IndexedNote { TelegramUserId = repository.TelegramUserId, RepositoryId = repository.Id, NotePath = path, Sha = sha }
                 );
             }
             else
@@ -173,16 +198,16 @@ public class NoteIndexer(
             {
                 // Octokit returns null content for files larger than 1 MB; keep the SHA so we don't retry every cycle.
                 logger.LogWarning(
-                    "Indexed note '{NotePath}' for user {TelegramId} has no downloadable content.",
+                    "Indexed note '{NotePath}' for repository {RepositoryId} has no downloadable content.",
                     path,
-                    user.TelegramId
+                    repository.Id
                 );
                 updatedCount++;
                 continue;
             }
 
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM NoteSearchFts WHERE TelegramUserId = {userId} AND NotePath = {path}",
+                $"DELETE FROM NoteSearchFts WHERE TelegramUserId = {userId} AND RepositoryId = {repositoryId} AND NotePath = {path}",
                 cancellationToken
             );
 
@@ -190,9 +215,12 @@ public class NoteIndexer(
             // note titles too.
             var indexedText = $"{path}\n{content}";
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT INTO NoteSearchFts (TelegramUserId, NotePath, Content) VALUES ({userId}, {path}, {indexedText})",
+                $"INSERT INTO NoteSearchFts (TelegramUserId, RepositoryId, NotePath, Content) VALUES ({userId}, {repositoryId}, {path}, {indexedText})",
                 cancellationToken
             );
+
+            // External edits can add or remove "@remind" markers — reconcile.
+            await reminderService.UpsertForNoteAsync(repository.TelegramUserId, repository.Id, path, content);
 
             updatedCount++;
         }
@@ -201,9 +229,10 @@ public class NoteIndexer(
         {
             dbContext.IndexedNotes.Remove(localNotes[path]);
             await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM NoteSearchFts WHERE TelegramUserId = {userId} AND NotePath = {path}",
+                $"DELETE FROM NoteSearchFts WHERE TelegramUserId = {userId} AND RepositoryId = {repositoryId} AND NotePath = {path}",
                 cancellationToken
             );
+            await reminderService.RemoveForNoteAsync(repository.TelegramUserId, repository.Id, path);
             removedCount++;
         }
 
@@ -212,8 +241,9 @@ public class NoteIndexer(
         if (updatedCount > 0 || removedCount > 0)
         {
             logger.LogInformation(
-                "Search index for user {TelegramId} updated: {UpdatedCount} indexed or updated, {RemovedCount} removed.",
-                user.TelegramId,
+                "Search index for repository {RepositoryId} (user {TelegramId}) updated: {UpdatedCount} indexed or updated, {RemovedCount} removed.",
+                repository.Id,
+                repository.TelegramUserId,
                 updatedCount,
                 removedCount
             );

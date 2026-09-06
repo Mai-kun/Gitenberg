@@ -43,7 +43,7 @@ public static class BotEndpoints
             string? format,
             AppDbContext dbContext,
             IGitHubService gitHubService,
-            ITokenEncryptionService encryptionService,
+            IRepositoryContextResolver repositoryResolver,
             InlineFileLinkService fileLinks,
             CancellationToken cancellationToken) =>
         {
@@ -59,17 +59,18 @@ public static class BotEndpoints
             }
 
             var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == uid, cancellationToken);
-            if (user == null || string.IsNullOrWhiteSpace(user.GitHubToken))
+            if (user == null)
             {
                 return Results.NotFound();
             }
 
-            var context = new GitHubRepositoryContext(
-                encryptionService.DecryptToken(user.GitHubToken),
-                user.RepositoryOwner,
-                user.RepositoryName
-            );
-            var content = await gitHubService.GetNoteContentAsync(context, path);
+            var repository = await repositoryResolver.ResolveActiveAsync(uid, cancellationToken);
+            if (repository == null)
+            {
+                return Results.NotFound();
+            }
+
+            var content = await gitHubService.GetNoteContentAsync(repository.Context, path);
 
             if (fileFormat == InlineFileLinkService.ZipFormat)
             {

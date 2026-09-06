@@ -39,10 +39,13 @@ export function setDevTelegramId(id) {
 }
 
 function authHeaders() {
+  // The client's UTC offset (JS getTimezoneOffset semantics: UTC+3 → -180)
+  // lets the backend bucket activity into the user's local day.
+  const tz = { 'X-Timezone-Offset': String(new Date().getTimezoneOffset()) };
   if (isInsideTelegram()) {
-    return { Authorization: `tma ${tg().initData}` };
+    return { Authorization: `tma ${tg().initData}`, ...tz };
   }
-  return { 'X-Telegram-Id': String(getDevTelegramId()) };
+  return { 'X-Telegram-Id': String(getDevTelegramId()), ...tz };
 }
 
 function buildUrl(path, params) {
@@ -189,6 +192,14 @@ export function getSettings() {
   return request('GET', '/api/register');
 }
 
+export function getActivityHeatmap() {
+  return request('GET', '/api/activity/heatmap');
+}
+
+export function getTasks() {
+  return request('GET', '/api/notes/tasks');
+}
+
 export function saveSettings({ githubToken, repositoryOwner, repositoryName, inboxPath, attachmentsPath }) {
   return request('POST', '/api/register', {
     body: {
@@ -199,6 +210,48 @@ export function saveSettings({ githubToken, repositoryOwner, repositoryName, inb
       ...(attachmentsPath ? { attachmentsPath } : {}),
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Multi-repo: manage the user's repositories and switch the active one
+// ---------------------------------------------------------------------------
+
+export function listRepositories() {
+  return request('GET', '/api/repositories');
+}
+
+export function createRepository({ displayName, githubToken, repositoryOwner, repositoryName, inboxPath, attachmentsPath }) {
+  return request('POST', '/api/repositories', {
+    body: {
+      ...(displayName ? { displayName } : {}),
+      githubToken,
+      repositoryOwner,
+      repositoryName,
+      ...(inboxPath ? { inboxPath } : {}),
+      ...(attachmentsPath ? { attachmentsPath } : {}),
+    },
+  });
+}
+
+export function updateRepository(id, { displayName, githubToken, repositoryOwner, repositoryName, inboxPath, attachmentsPath }) {
+  return request('PUT', `/api/repositories/${id}`, {
+    body: {
+      ...(displayName ? { displayName } : {}),
+      ...(githubToken ? { githubToken } : {}),
+      repositoryOwner,
+      repositoryName,
+      ...(inboxPath ? { inboxPath } : {}),
+      ...(attachmentsPath ? { attachmentsPath } : {}),
+    },
+  });
+}
+
+export function deleteRepository(id) {
+  return request('DELETE', `/api/repositories/${id}`);
+}
+
+export function activateRepository(id) {
+  return request('POST', `/api/repositories/${id}/activate`);
 }
 
 // Binary download — request() assumes JSON, so this is a separate code path.

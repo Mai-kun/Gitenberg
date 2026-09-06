@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using Repository = Gitenberg.Web.Models.Repository;
 using User = Gitenberg.Web.Models.User;
 
 namespace Gitenberg.Tests.Features.Registration;
@@ -145,14 +146,16 @@ public class RegistrationEndpointsTests
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
-        user.Should().NotBeNull();
-        user!.RepositoryOwner.Should().Be("owner");
-        user.RepositoryName.Should().Be("repo");
+        var repository = await db.Repositories.SingleAsync(r => r.TelegramUserId == 12345);
+        repository.RepositoryOwner.Should().Be("owner");
+        repository.RepositoryName.Should().Be("repo");
 
-        var decryptedToken = _encryptionService.DecryptToken(user.GitHubToken!);
+        var decryptedToken = _encryptionService.DecryptToken(repository.GitHubToken!);
         decryptedToken.Should().Be("github_pat_key");
 
+        var user = await db.Users.FirstAsync(u => u.TelegramId == 12345);
+        user.SelectedRepositoryId.Should().Be(repository.Id);
+        repository.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         user.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
         user.LastActivityAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
@@ -162,17 +165,7 @@ public class RegistrationEndpointsTests
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
-        var existingUser = new User
-        {
-            TelegramId = 12345,
-            GitHubToken = _encryptionService.EncryptToken("old_token", TimeSpan.FromMinutes(10)),
-            RepositoryOwner = "old_owner",
-            RepositoryName = "old_repo",
-            CreatedAt = DateTime.UtcNow.AddDays(-1),
-            LastActivityAt = DateTime.UtcNow.AddDays(-1)
-        };
-        db.Users.Add(existingUser);
-        await db.SaveChangesAsync();
+        var (user, repository) = await SeedUserWithRepositoryAsync(db, 12345, token: "old_token", owner: "old_owner", repo: "old_repo");
 
         var request = new RegisterUserRequest(12345, "new_token", "new_owner", "new_repo");
 
@@ -184,17 +177,17 @@ public class RegistrationEndpointsTests
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        // Refresh from DB
-        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
-        user.Should().NotBeNull();
-        user!.RepositoryOwner.Should().Be("new_owner");
-        user.RepositoryName.Should().Be("new_repo");
+        // Refresh from DB: settings updates go to the active repository.
+        db.Entry(repository).Reload();
+        repository.RepositoryOwner.Should().Be("new_owner");
+        repository.RepositoryName.Should().Be("new_repo");
 
-        var decryptedToken = _encryptionService.DecryptToken(user.GitHubToken!);
+        var decryptedToken = _encryptionService.DecryptToken(repository.GitHubToken!);
         decryptedToken.Should().Be("new_token");
 
         // CreatedAt should be untouched, LastActivityAt should be updated to current time
         user.CreatedAt.Should().BeCloseTo(DateTime.UtcNow.AddDays(-1), TimeSpan.FromSeconds(5));
+        db.Entry(user).Reload();
         user.LastActivityAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
@@ -217,10 +210,9 @@ public class RegistrationEndpointsTests
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
-        user.Should().NotBeNull();
-        user!.InboxPath.Should().Be("my-notes");
-        user.AttachmentsPath.Should().Be("assets/photos");
+        var repository = await db.Repositories.SingleAsync(r => r.TelegramUserId == 12345);
+        repository.InboxPath.Should().Be("my-notes");
+        repository.AttachmentsPath.Should().Be("assets/photos");
     }
 
     [Fact]
@@ -238,10 +230,9 @@ public class RegistrationEndpointsTests
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
-        user.Should().NotBeNull();
-        user!.InboxPath.Should().Be("inbox");
-        user.AttachmentsPath.Should().Be("inbox/attachments");
+        var repository = await db.Repositories.SingleAsync(r => r.TelegramUserId == 12345);
+        repository.InboxPath.Should().Be("inbox");
+        repository.AttachmentsPath.Should().Be("inbox/attachments");
     }
 
     [Fact]
@@ -249,19 +240,8 @@ public class RegistrationEndpointsTests
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
-        var existingUser = new User
-        {
-            TelegramId = 12345,
-            GitHubToken = _encryptionService.EncryptToken("old_token", TimeSpan.FromMinutes(10)),
-            RepositoryOwner = "old_owner",
-            RepositoryName = "old_repo",
-            InboxPath = "my-notes",
-            AttachmentsPath = "assets/photos",
-            CreatedAt = DateTime.UtcNow.AddDays(-1),
-            LastActivityAt = DateTime.UtcNow.AddDays(-1)
-        };
-        db.Users.Add(existingUser);
-        await db.SaveChangesAsync();
+        await SeedUserWithRepositoryAsync(db, 12345, token: "old_token", owner: "old_owner", repo: "old_repo",
+            inboxPath: "my-notes", attachmentsPath: "assets/photos");
 
         var request = new RegisterUserRequest(12345, "new_token", "new_owner", "new_repo");
 
@@ -273,10 +253,9 @@ public class RegistrationEndpointsTests
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
-        user.Should().NotBeNull();
-        user!.InboxPath.Should().Be("my-notes");
-        user.AttachmentsPath.Should().Be("assets/photos");
+        var repository = await db.Repositories.SingleAsync(r => r.TelegramUserId == 12345);
+        repository.InboxPath.Should().Be("my-notes");
+        repository.AttachmentsPath.Should().Be("assets/photos");
     }
 
     [Fact]
@@ -284,19 +263,8 @@ public class RegistrationEndpointsTests
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
-        var existingUser = new User
-        {
-            TelegramId = 12345,
-            GitHubToken = _encryptionService.EncryptToken("old_token", TimeSpan.FromMinutes(10)),
-            RepositoryOwner = "old_owner",
-            RepositoryName = "old_repo",
-            InboxPath = "my-notes",
-            AttachmentsPath = "assets/photos",
-            CreatedAt = DateTime.UtcNow.AddDays(-1),
-            LastActivityAt = DateTime.UtcNow.AddDays(-1)
-        };
-        db.Users.Add(existingUser);
-        await db.SaveChangesAsync();
+        await SeedUserWithRepositoryAsync(db, 12345, token: "old_token", owner: "old_owner", repo: "old_repo",
+            inboxPath: "my-notes", attachmentsPath: "assets/photos");
 
         var request = new RegisterUserRequest(
             12345, "new_token", "new_owner", "new_repo",
@@ -312,9 +280,47 @@ public class RegistrationEndpointsTests
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
-        user.Should().NotBeNull();
-        user!.InboxPath.Should().Be("notes");
-        user.AttachmentsPath.Should().Be("notes/media");
+        var repository = await db.Repositories.SingleAsync(r => r.TelegramUserId == 12345);
+        repository.InboxPath.Should().Be("notes");
+        repository.AttachmentsPath.Should().Be("notes/media");
+    }
+
+    private async Task<(User User, Repository Repository)> SeedUserWithRepositoryAsync(
+        AppDbContext db,
+        long telegramId,
+        string token,
+        string owner,
+        string repo,
+        string inboxPath = "inbox",
+        string attachmentsPath = "inbox/attachments"
+    )
+    {
+        var user = new User
+        {
+            TelegramId = telegramId,
+            GitHubToken = _encryptionService.EncryptToken(token, TimeSpan.FromMinutes(10)),
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            LastActivityAt = DateTime.UtcNow.AddDays(-1),
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var repository = new Repository
+        {
+            TelegramUserId = telegramId,
+            DisplayName = $"{owner}/{repo}",
+            RepositoryOwner = owner,
+            RepositoryName = repo,
+            GitHubToken = _encryptionService.EncryptToken(token, TimeSpan.FromMinutes(10)),
+            InboxPath = inboxPath,
+            AttachmentsPath = attachmentsPath,
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+        };
+        db.Repositories.Add(repository);
+        await db.SaveChangesAsync();
+
+        user.SelectedRepositoryId = repository.Id;
+        await db.SaveChangesAsync();
+        return (user, repository);
     }
 }

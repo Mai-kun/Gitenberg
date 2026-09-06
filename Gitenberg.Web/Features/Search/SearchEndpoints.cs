@@ -1,6 +1,7 @@
 using System.Globalization;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public static class SearchEndpoints
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
+        IRepositoryContextResolver repositoryResolver,
         NoteIndexer indexer,
         HttpContext? httpContext = null
     )
@@ -54,12 +56,18 @@ public static class SearchEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
+        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        if (repository == null)
+        {
+            return Results.Ok(new List<NoteSearchResult>());
+        }
+
         // Refresh the index right before searching: the incremental sync is
         // cheap when nothing changed and guarantees fresh results (new notes
         // from external sources included).
         try
         {
-            await indexer.SynchronizeUserByIdAsync(telegramId.Value);
+            await indexer.SynchronizeUserByIdAsync(telegramId.Value, repository.RepositoryId);
         }
         catch (Exception ex)
         {
@@ -76,13 +84,15 @@ public static class SearchEndpoints
         List<NoteSearchResult> results;
         try
         {
-            // TelegramUserId is stored as TEXT in the FTS table, so it must be bound as a string.
+            // TelegramUserId and RepositoryId are stored as TEXT in the FTS
+            // table, so they must be bound as strings.
             results = await dbContext.Database.SqlQuery<NoteSearchResult>(
                 $"""
                 SELECT NotePath,
-                       snippet(NoteSearchFts, 2, '<b>', '</b>', '...', 10) AS Snippet
+                       snippet(NoteSearchFts, 3, '<b>', '</b>', '...', 10) AS Snippet
                 FROM NoteSearchFts
                 WHERE TelegramUserId = {telegramId.Value.ToString(CultureInfo.InvariantCulture)}
+                  AND RepositoryId = {repository.RepositoryId.ToString(CultureInfo.InvariantCulture)}
                   AND NoteSearchFts MATCH {matchExpression}
                 ORDER BY rank
                 LIMIT 50

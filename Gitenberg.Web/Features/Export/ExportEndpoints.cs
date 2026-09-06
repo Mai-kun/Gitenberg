@@ -26,7 +26,7 @@ public static class ExportEndpoints
         [FromQuery(Name = "reference")] string? reference,
         AppDbContext dbContext,
         IGitHubService gitHubService,
-        ITokenEncryptionService encryptionService,
+        IRepositoryContextResolver repositoryResolver,
         HttpContext? httpContext = null
     )
     {
@@ -43,18 +43,16 @@ public static class ExportEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
+        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        if (repository == null)
         {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
+            return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
 
-        var context = new GitHubRepositoryContext(
-            encryptionService.DecryptToken(user.GitHubToken), user.RepositoryOwner, user.RepositoryName);
-
-        var archive = await gitHubService.GetRepositoryArchiveAsync(context, reference);
+        var archive = await gitHubService.GetRepositoryArchiveAsync(repository.Context, reference);
 
         var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmm");
-        var fileName = $"{user.RepositoryName}-{stamp}.zip";
+        var fileName = $"{repository.Repository.RepositoryName}-{stamp}.zip";
 
         return Results.File(archive, "application/zip", fileName);
     }

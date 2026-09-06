@@ -121,6 +121,9 @@ public class UserCaptureColumnsTests
 
             // Act
             dbContext.EnsureUserCaptureColumnsCreated();
+            // Production startup order: the repositories migration runs after
+            // the capture columns exist (it seeds from them).
+            dbContext.EnsureRepositoriesTableCreated();
 
             // Assert
             var user = dbContext.Users.AsNoTracking().Single(u => u.TelegramId == 42);

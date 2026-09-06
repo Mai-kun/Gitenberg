@@ -8,13 +8,16 @@ using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services;
+using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using Octokit;
 using Xunit;
+using Repository = Gitenberg.Web.Models.Repository;
 using User = Gitenberg.Web.Models.User;
 
 namespace Gitenberg.Tests.Features.Notes;
@@ -44,6 +47,7 @@ public class HistoryEndpointsTests
 
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
+        Gitenberg.Web.Features.Reminders.ReminderService.EnsureTableCreated(dbContext);
         return dbContext;
     }
 
@@ -53,17 +57,37 @@ public class HistoryEndpointsTests
         return new PendingSyncService(db);
     }
 
+    private IRepositoryContextResolver CreateResolver(AppDbContext db) =>
+        new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance);
+
+    private static int ActiveRepoId(AppDbContext db, long telegramId) =>
+        db.Repositories.Where(r => r.TelegramUserId == telegramId).OrderBy(r => r.Id).First().Id;
+
     private async Task CreateUserAsync(AppDbContext db, long telegramId, string? token = "pat_123")
     {
         var encryptedToken = token == null ? null : _encryptionService.EncryptToken(token, TimeSpan.FromMinutes(10));
         var user = new User
         {
             TelegramId = telegramId,
-            GitHubToken = encryptedToken,
-            RepositoryOwner = "owner",
-            RepositoryName = "repo",
+            CreatedAt = DateTime.UtcNow,
+            LastActivityAt = DateTime.UtcNow,
         };
         db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var repository = new Repository
+        {
+            TelegramUserId = telegramId,
+            DisplayName = "owner/repo",
+            RepositoryOwner = "owner",
+            RepositoryName = "repo",
+            GitHubToken = encryptedToken,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Repositories.Add(repository);
+        await db.SaveChangesAsync();
+
+        user.SelectedRepositoryId = repository.Id;
         await db.SaveChangesAsync();
     }
 
@@ -80,7 +104,7 @@ public class HistoryEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            "notes/idea.md", null, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            "notes/idea.md", null, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -93,7 +117,7 @@ public class HistoryEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            null!, 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            null!, 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -106,7 +130,7 @@ public class HistoryEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            "notes/idea.md", 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            "notes/idea.md", 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -120,7 +144,7 @@ public class HistoryEndpointsTests
         await CreateUserAsync(db, 12345, token: null);
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            "notes/idea.md", 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            "notes/idea.md", 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -148,7 +172,7 @@ public class HistoryEndpointsTests
         };
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            "notes/idea.md", 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            "notes/idea.md", 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -182,7 +206,7 @@ public class HistoryEndpointsTests
         };
 
         await HistoryEndpoints.GetNoteHistory(
-            "/notes/idea.md", 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            "/notes/idea.md", 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         // Leading-slash normalization is GitHubService's job (it owns the
         // Octokit call); the endpoint forwards the raw path.
@@ -199,7 +223,7 @@ public class HistoryEndpointsTests
             throw new NotFoundException("No commits", HttpStatusCode.NotFound);
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            "notes/missing.md", 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            "notes/missing.md", 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -212,7 +236,7 @@ public class HistoryEndpointsTests
         await using var db = CreateInMemoryDbContext();
         await CreateUserAsync(db, 12345);
         var pendingSync = CreatePendingSync(db);
-        await pendingSync.EnqueueAsync(12345, "save", "notes/idea.md", null, "local draft");
+        await pendingSync.EnqueueAsync(12345, ActiveRepoId(db, 12345), "save", "notes/idea.md", null, "local draft");
 
         _gitHubService.GetCommitHistoryFunc = (_, _) =>
             Task.FromResult<IReadOnlyList<NoteCommitInfo>>(new List<NoteCommitInfo>
@@ -221,7 +245,7 @@ public class HistoryEndpointsTests
             });
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            "notes/idea.md", 12345, null, db, _encryptionService, _gitHubService, pendingSync);
+            "notes/idea.md", 12345, null, db, CreateResolver(db), _gitHubService, pendingSync);
 
         var valueResult = result as IValueHttpResult;
         valueResult.Should().NotBeNull();
@@ -236,7 +260,7 @@ public class HistoryEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         var result = await HistoryEndpoints.GetNoteVersionContent(
-            "notes/idea.md", null!, 12345, null, db, _encryptionService, _gitHubService);
+            "notes/idea.md", null!, 12345, null, db, CreateResolver(db), _gitHubService);
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -258,7 +282,7 @@ public class HistoryEndpointsTests
         };
 
         var result = await HistoryEndpoints.GetNoteVersionContent(
-            "notes/idea.md", "abcdef1234567890", 12345, null, db, _encryptionService, _gitHubService);
+            "notes/idea.md", "abcdef1234567890", 12345, null, db, CreateResolver(db), _gitHubService);
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -281,7 +305,7 @@ public class HistoryEndpointsTests
             throw new NotFoundException("File not found at commit", HttpStatusCode.NotFound);
 
         var result = await HistoryEndpoints.GetNoteVersionContent(
-            "notes/idea.md", "abcdef1234567890", 12345, null, db, _encryptionService, _gitHubService);
+            "notes/idea.md", "abcdef1234567890", 12345, null, db, CreateResolver(db), _gitHubService);
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -295,7 +319,7 @@ public class HistoryEndpointsTests
         var request = new RestoreNoteVersionRequest("notes/idea.md", null!);
 
         var result = await HistoryEndpoints.RestoreNoteVersion(
-            request, 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db), _memoryCache);
+            request, 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db), _memoryCache, new Gitenberg.Web.Features.Reminders.ReminderService(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -309,7 +333,7 @@ public class HistoryEndpointsTests
         var request = new RestoreNoteVersionRequest("notes/idea.md", "abcdef1234567890");
 
         var result = await HistoryEndpoints.RestoreNoteVersion(
-            request, 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db), _memoryCache);
+            request, 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db), _memoryCache, new Gitenberg.Web.Features.Reminders.ReminderService(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -327,13 +351,13 @@ public class HistoryEndpointsTests
 
         var request = new RestoreNoteVersionRequest("notes/idea.md", "abcdef1234567890");
         var result = await HistoryEndpoints.RestoreNoteVersion(
-            request, 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db), _memoryCache);
+            request, 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db), _memoryCache, new Gitenberg.Web.Features.Reminders.ReminderService(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
         statusCodeResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
 
-        var pending = await CreatePendingSync(db).GetOpsAsync(12345);
+        var pending = await CreatePendingSync(db).GetOpsAsync(12345, ActiveRepoId(db, 12345));
         pending.Should().BeEmpty();
     }
 
@@ -353,7 +377,7 @@ public class HistoryEndpointsTests
 
         var request = new RestoreNoteVersionRequest("/notes/idea.md", "abcdef1234567890");
         var result = await HistoryEndpoints.RestoreNoteVersion(
-            request, 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db), _memoryCache);
+            request, 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db), _memoryCache, new Gitenberg.Web.Features.Reminders.ReminderService(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -361,7 +385,7 @@ public class HistoryEndpointsTests
 
         // Local-first: the restore is queued as a regular save op with a
         // meaningful commit message (sha sliced to 7 chars, not formatted).
-        var pending = await CreatePendingSync(db).GetOpsAsync(12345);
+        var pending = await CreatePendingSync(db).GetOpsAsync(12345, ActiveRepoId(db, 12345));
         pending.Should().ContainSingle();
         pending[0].Kind.Should().Be("save");
         pending[0].FromPath.Should().Be("notes/idea.md");
@@ -379,11 +403,11 @@ public class HistoryEndpointsTests
         var request = new RestoreNoteVersionRequest("notes/idea.md", "abcdef1234567890");
 
         // Prime the notes cache for two paths, restore, then both must refetch.
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder1", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder2", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
 
         await HistoryEndpoints.RestoreNoteVersion(
-            request, 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db), _memoryCache);
+            request, 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db), _memoryCache, new Gitenberg.Web.Features.Reminders.ReminderService(db));
 
         var requestedPaths = new List<string?>();
         _gitHubService.GetNotesFunc = (_, path) =>
@@ -392,8 +416,8 @@ public class HistoryEndpointsTests
             return Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent>());
         };
 
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, _encryptionService, _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder1", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder2", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
 
         requestedPaths.Should().BeEquivalentTo("folder1", "folder2");
     }
@@ -408,7 +432,7 @@ public class HistoryEndpointsTests
             Task.FromResult<IReadOnlyList<NoteCommitInfo>>(new List<NoteCommitInfo>());
 
         var result = await HistoryEndpoints.GetNoteHistory(
-            "notes/fresh.md", 12345, null, db, _encryptionService, _gitHubService, CreatePendingSync(db));
+            "notes/fresh.md", 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var valueResult = result as IValueHttpResult;
         valueResult.Should().NotBeNull();

@@ -4,6 +4,7 @@ using System.Text;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Models;
+using Gitenberg.Web.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -22,6 +23,7 @@ public class InlineSearchHandler(
     ITelegramBotClient botClient,
     AppDbContext dbContext,
     BotConfiguration botConfig,
+    IRepositoryContextResolver repositoryResolver,
     NoteIndexer indexer,
     InlineFileLinkService fileLinks,
     ILogger<InlineSearchHandler> logger
@@ -68,6 +70,12 @@ public class InlineSearchHandler(
             return [BuildRegistrationArticle()];
         }
 
+        var repository = await repositoryResolver.ResolveActiveAsync(telegramId, cancellationToken);
+        if (repository == null)
+        {
+            return [BuildRegistrationArticle()];
+        }
+
         var query = inlineQuery.Query.Trim();
         if (query.Length == 0)
         {
@@ -75,10 +83,11 @@ public class InlineSearchHandler(
         }
 
         // Same freshness contract as the web search endpoint: refresh the
-        // index first (cheap when nothing changed), then query it.
+        // active repository's index first (cheap when nothing changed), then
+        // query it.
         try
         {
-            await indexer.SynchronizeUserByIdAsync(telegramId, cancellationToken);
+            await indexer.SynchronizeUserByIdAsync(telegramId, repository.RepositoryId, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -98,14 +107,16 @@ public class InlineSearchHandler(
         List<InlineNoteHit> hits;
         try
         {
-            // TelegramUserId is stored as TEXT in the FTS table, so it must be bound as a string.
+            // TelegramUserId and RepositoryId are stored as TEXT in the FTS
+            // table, so they must be bound as strings.
             hits = await dbContext.Database.SqlQuery<InlineNoteHit>(
                 $"""
                 SELECT NotePath,
-                       snippet(NoteSearchFts, 2, '', '', '…', 12) AS Snippet,
+                       snippet(NoteSearchFts, 3, '', '', '…', 12) AS Snippet,
                        Content
                 FROM NoteSearchFts
                 WHERE TelegramUserId = {telegramId.ToString(CultureInfo.InvariantCulture)}
+                  AND RepositoryId = {repository.RepositoryId.ToString(CultureInfo.InvariantCulture)}
                   AND NoteSearchFts MATCH {matchExpression}
                 ORDER BY rank
                 LIMIT {MaxResults}
@@ -119,7 +130,7 @@ public class InlineSearchHandler(
             return [];
         }
 
-        return hits.SelectMany(hit => BuildResultsForNote(user, hit)).ToList();
+        return hits.SelectMany(hit => BuildResultsForNote(user, repository, hit)).ToList();
     }
 
     /// <summary>
@@ -127,18 +138,18 @@ public class InlineSearchHandler(
     /// the chat, choosing the document makes Telegram fetch the note as a
     /// file and deliver it as a document message.
     /// </summary>
-    private IEnumerable<InlineQueryResult> BuildResultsForNote(User user, InlineNoteHit hit)
+    private IEnumerable<InlineQueryResult> BuildResultsForNote(User user, ResolvedRepository repository, InlineNoteHit hit)
     {
-        yield return BuildNoteArticle(user, hit);
+        yield return BuildNoteArticle(user, repository, hit);
 
-        var document = BuildNoteDocument(user, hit);
+        var document = BuildNoteDocument(user, repository, hit);
         if (document != null)
         {
             yield return document;
         }
     }
 
-    private InlineQueryResultArticle BuildNoteArticle(User user, InlineNoteHit hit)
+    private InlineQueryResultArticle BuildNoteArticle(User user, ResolvedRepository repository, InlineNoteHit hit)
     {
         // The index stores "path\ncontent"; the note body starts after the path line.
         var content = hit.Content;
@@ -161,11 +172,11 @@ public class InlineSearchHandler(
             {
                 MessageText = header + body,
             },
-            ReplyMarkup = BuildKeyboard(user, hit.NotePath),
+            ReplyMarkup = BuildKeyboard(repository, hit.NotePath),
         };
     }
 
-    private InlineQueryResultDocument? BuildNoteDocument(User user, InlineNoteHit hit)
+    private InlineQueryResultDocument? BuildNoteDocument(User user, ResolvedRepository repository, InlineNoteHit hit)
     {
         if (string.IsNullOrWhiteSpace(botConfig.HostAddress))
         {
@@ -194,11 +205,11 @@ public class InlineSearchHandler(
         };
     }
 
-    private InlineKeyboardMarkup? BuildKeyboard(User user, string notePath)
+    private InlineKeyboardMarkup? BuildKeyboard(ResolvedRepository repository, string notePath)
     {
         var githubPath = string.Join('/', notePath.Split('/').Select(Uri.EscapeDataString));
         var githubUrl =
-            $"https://github.com/{user.RepositoryOwner}/{user.RepositoryName}/blob/HEAD/{githubPath}";
+            $"https://github.com/{repository.Context.Owner}/{repository.Context.Repo}/blob/HEAD/{githubPath}";
         if (githubUrl.Length > MaxUrlLength)
         {
             return null;

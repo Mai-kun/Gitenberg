@@ -198,6 +198,13 @@ const els = {
   settingsToken: $('settings-token'),
   settingsInboxPath: $('settings-inbox-path'),
   settingsAttachmentsPath: $('settings-attachments-path'),
+  repoList: $('repo-list'),
+  btnRepoAdd: $('btn-repo-add'),
+  repoFormTitle: $('repo-form-title'),
+  settingsRepoName: $('settings-repo-name'),
+  repoFormActions: $('repo-form-actions'),
+  btnRepoCancelEdit: $('btn-repo-cancel-edit'),
+  btnRepoDelete: $('btn-repo-delete'),
   settingsAutosave: $('settings-autosave'),
   settingsAutosync: $('settings-autosync'),
   settingsError: $('settings-error'),
@@ -206,6 +213,20 @@ const els = {
   settingsBack: $('btn-settings-back'),
   settingsAutosyncInterval: $('settings-autosync-interval'),
   autosyncIntervalField: $('autosync-interval-field'),
+  explorerTabs: $('explorer-tabs'),
+  tabNotes: $('tab-notes'),
+  tabTasks: $('tab-tasks'),
+  tasksTabCount: $('tasks-tab-count'),
+  activityCard: $('activity-card'),
+  activityToggle: $('activity-toggle'),
+  activitySummary: $('activity-summary'),
+  activityChevron: $('activity-chevron'),
+  activityBody: $('activity-body'),
+  heatmapGrid: $('heatmap-grid'),
+  tasksToolbar: $('tasks-toolbar'),
+  tasksFilterActive: $('tasks-filter-active'),
+  tasksFilterAll: $('tasks-filter-all'),
+  tasksList: $('tasks-list'),
 };
 
 const state = {
@@ -222,6 +243,12 @@ const state = {
   },
   historyPath: null, // note path shown in the history sheet
   historySeq: 0, // guards against out-of-order history responses
+  currentTab: 'notes', // 'notes' | 'tasks' (root-level tab switch)
+  tasks: [], // aggregated checklist from GET /api/notes/tasks
+  tasksFilter: 'active', // 'active' | 'all'
+  heatmapOk: false, // heatmap data loaded successfully at least once
+  repositories: [], // user's repositories (GET /api/repositories)
+  repoFormRepoId: null, // repository bound to the settings form; null = new one
 };
 
 // Unique #tags in a markdown text (headings excluded by construction: their #
@@ -554,6 +581,10 @@ function formatSize(size) {
 
 async function loadFolder(path) {
   state.currentPath = path;
+  const atRoot = path === '';
+  els.explorerTabs.hidden = !atRoot;
+  els.activityCard.hidden = !atRoot || !state.heatmapOk;
+  showTab(atRoot ? state.currentTab : 'notes');
   renderBreadcrumbs(path);
   hideSearchResults();
   skeletonRows();
@@ -602,6 +633,351 @@ function handleBackNavigation() {
     segments.pop();
     void enterExplorer(segments.join('/'));
   }
+}
+
+// ---------------------------------------------------------------------------
+// Activity heatmap (GitHub contribution style) — root level only
+// ---------------------------------------------------------------------------
+
+let heatmapCollapsed = localStorage.getItem('gitenberg.activity.collapsed') === '1';
+
+function localDateKey(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function heatmapLevel(count) {
+  if (count <= 0) return 'level-0';
+  if (count === 1) return 'level-1';
+  if (count <= 3) return 'level-2';
+  if (count <= 6) return 'level-3';
+  return 'level-4';
+}
+
+function renderHeatmap(days) {
+  const counts = new Map(days.map((d) => [d.date, d.count]));
+  const grid = els.heatmapGrid;
+  grid.textContent = '';
+
+  const today = new Date();
+  // Align columns to weeks, Monday first row (RU convention).
+  const mondayOffset = (today.getDay() + 6) % 7;
+  const currentWeekMonday = new Date(today);
+  currentWeekMonday.setDate(today.getDate() - mondayOffset);
+
+  const weeks = 53;
+  for (let w = weeks - 1; w >= 0; w -= 1) {
+    for (let dow = 0; dow < 7; dow += 1) {
+      const cellDate = new Date(currentWeekMonday);
+      cellDate.setDate(currentWeekMonday.getDate() - w * 7 + dow);
+      const key = localDateKey(cellDate);
+      const count = counts.get(key) ?? 0;
+
+      const cell = document.createElement('span');
+      cell.className = `heatmap-cell ${heatmapLevel(count)}`;
+      cell.title = `${key}: ${count}`;
+      if (cellDate > today) cell.classList.add('is-future');
+      grid.append(cell);
+    }
+  }
+}
+
+function computeStreak(days) {
+  const active = new Set(days.filter((d) => d.count > 0).map((d) => d.date));
+  const cursor = new Date();
+  if (!active.has(localDateKey(cursor))) {
+    cursor.setDate(cursor.getDate() - 1); // today not yet active — count up to yesterday
+  }
+  let streak = 0;
+  while (active.has(localDateKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+function applyActivityCollapsed() {
+  els.activityBody.hidden = heatmapCollapsed;
+  els.activityChevron.textContent = heatmapCollapsed ? '▸' : '▾';
+  els.activityToggle.setAttribute('aria-expanded', heatmapCollapsed ? 'false' : 'true');
+}
+
+async function refreshHeatmap() {
+  try {
+    const data = await api.getActivityHeatmap();
+    const days = Array.isArray(data?.days) ? data.days : [];
+    renderHeatmap(days);
+    els.activitySummary.textContent = STRINGS.activitySummary(data?.total ?? 0, computeStreak(days));
+    state.heatmapOk = true;
+  } catch {
+    state.heatmapOk = false;
+  }
+  if (!els.views.explorer.hidden) {
+    els.activityCard.hidden = state.currentPath !== '' || !state.heatmapOk;
+  }
+}
+
+els.activityToggle.addEventListener('click', () => {
+  heatmapCollapsed = !heatmapCollapsed;
+  localStorage.setItem('gitenberg.activity.collapsed', heatmapCollapsed ? '1' : '0');
+  applyActivityCollapsed();
+});
+
+// ---------------------------------------------------------------------------
+// Tasks tab — all markdown checkboxes across the vault, toggle = new commit
+// ---------------------------------------------------------------------------
+
+// Short-lived per-note content cache: quick consecutive toggles must modify
+// the already-flipped text, not re-read the stale one (race between clicks).
+const taskContentCache = new Map();
+// Per-path serialization: toggle jobs for one note run strictly in order.
+const taskQueues = new Map();
+
+function invalidateCaches() {
+  invalidateVaultIndex();
+  taskContentCache.clear();
+}
+
+// Mirrors the backend TaskListBuilder regex exactly (bullets, ordered lists,
+// code-fence skipping) so occurrence indexes stay aligned.
+const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\]\s*.*)$/;
+
+function flipCheckboxOccurrence(content, occurrenceIndex) {
+  const lines = content.split('\n');
+  let occurrence = 0;
+  let inFence = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^\s*(```|~~~)/.test(lines[i])) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const match = lines[i].match(TASK_LINE_RE);
+    if (!match) continue;
+    if (occurrence !== occurrenceIndex) {
+      occurrence += 1;
+      continue;
+    }
+    lines[i] = match[1] + (match[2] === ' ' ? 'x' : ' ') + match[3];
+    return lines.join('\n');
+  }
+  throw new Error('Task line not found');
+}
+
+function updateTasksBadge() {
+  const active = state.tasks.filter((task) => !task.checked).length;
+  els.tasksTabCount.hidden = active === 0;
+  els.tasksTabCount.textContent = String(active);
+}
+
+function renderTasks() {
+  els.tasksList.textContent = '';
+  const all = state.tasks;
+  const visible = state.tasksFilter === 'active' ? all.filter((task) => !task.checked) : all;
+
+  if (!visible.length) {
+    const empty = document.createElement('div');
+    empty.className = 'status-text';
+    empty.textContent = state.tasksFilter === 'active' && all.length > 0 ? STRINGS.emptyTasks : STRINGS.emptyTasksAll;
+    els.tasksList.append(empty);
+    return;
+  }
+
+  const groups = new Map();
+  for (const task of visible) {
+    if (!groups.has(task.notePath)) groups.set(task.notePath, []);
+    groups.get(task.notePath).push(task);
+  }
+
+  for (const [notePath, items] of groups) {
+    const group = document.createElement('section');
+    group.className = 'task-group';
+
+    const header = document.createElement('button');
+    header.type = 'button';
+    header.className = 'task-group-header';
+    const name = document.createElement('span');
+    name.className = 'task-group-name';
+    name.textContent = notePath.split('/').pop();
+    const count = document.createElement('span');
+    count.className = 'task-group-count';
+    count.textContent = String(items.length);
+    header.append(name, count);
+    header.addEventListener('click', () => {
+      showTab('notes');
+      void openEditor('edit', notePath);
+    });
+    group.append(header);
+
+    for (const task of items) {
+      const row = document.createElement('div');
+      row.className = `task-row${task.checked ? ' is-done' : ''}`;
+
+      const check = document.createElement('button');
+      check.type = 'button';
+      check.className = 'task-check';
+      check.setAttribute('role', 'checkbox');
+      check.setAttribute('aria-checked', task.checked ? 'true' : 'false');
+      check.setAttribute('aria-label', task.text || notePath);
+      check.textContent = task.checked ? '✓' : '';
+      check.addEventListener('click', () => toggleTask(task));
+
+      const text = document.createElement('button');
+      text.type = 'button';
+      text.className = 'task-text';
+      text.textContent = task.text || STRINGS.taskNoText;
+      text.addEventListener('click', () => {
+        showTab('notes');
+        void openEditor('edit', task.notePath);
+      });
+
+      row.append(check, text);
+      group.append(row);
+    }
+
+    els.tasksList.append(group);
+  }
+}
+
+async function loadTasks() {
+  els.tasksList.textContent = '';
+  const pending = document.createElement('div');
+  pending.className = 'status-text';
+  pending.textContent = STRINGS.loading;
+  els.tasksList.append(pending);
+
+  try {
+    const tasks = await api.getTasks();
+    state.tasks = Array.isArray(tasks) ? tasks : [];
+    updateTasksBadge();
+    renderTasks();
+  } catch (error) {
+    els.tasksList.textContent = '';
+    const failed = document.createElement('div');
+    failed.className = 'status-text';
+    failed.textContent = error instanceof api.ApiError ? error.message : STRINGS.loadFailed;
+    els.tasksList.append(failed);
+  }
+}
+
+// Background refresh: keeps the tab badge current without stealing the view.
+async function refreshTasksData() {
+  try {
+    const tasks = await api.getTasks();
+    state.tasks = Array.isArray(tasks) ? tasks : [];
+    updateTasksBadge();
+    if (!els.views.explorer.hidden && state.currentTab === 'tasks' && state.currentPath === '') {
+      renderTasks();
+    }
+  } catch {
+    /* badge stays stale until the next refresh */
+  }
+}
+
+function showTab(tab) {
+  state.currentTab = tab;
+  els.tabNotes.classList.toggle('is-active', tab === 'notes');
+  els.tabTasks.classList.toggle('is-active', tab === 'tasks');
+
+  const notes = tab === 'notes';
+  const atRoot = state.currentPath === '';
+  els.notesList.hidden = !notes;
+  els.tasksToolbar.hidden = notes || !atRoot;
+  els.tasksList.hidden = notes || !atRoot;
+  els.fabCreate.hidden = !notes;
+  if (!notes && atRoot) void loadTasks();
+}
+
+els.tabNotes.addEventListener('click', () => {
+  haptic('select');
+  showTab('notes');
+});
+els.tabTasks.addEventListener('click', () => {
+  haptic('select');
+  showTab('tasks');
+});
+els.tasksFilterActive.addEventListener('click', () => {
+  state.tasksFilter = 'active';
+  els.tasksFilterActive.classList.add('is-active');
+  els.tasksFilterAll.classList.remove('is-active');
+  renderTasks();
+});
+els.tasksFilterAll.addEventListener('click', () => {
+  state.tasksFilter = 'all';
+  els.tasksFilterAll.classList.add('is-active');
+  els.tasksFilterActive.classList.remove('is-active');
+  renderTasks();
+});
+
+function toggleTask(task) {
+  haptic('select');
+  const wasChecked = task.checked;
+  task.checked = !wasChecked; // optimistic flip
+  updateTasksBadge();
+  renderTasks();
+
+  const previous = taskQueues.get(task.notePath) ?? Promise.resolve();
+  const job = previous.catch(() => {}).then(async () => {
+    try {
+      let content = taskContentCache.get(task.notePath);
+      if (content == null) {
+        const data = await api.getNoteContent(task.notePath);
+        content = data?.content ?? '';
+      }
+      const flipped = flipCheckboxOccurrence(content, task.occurrenceIndex);
+      taskContentCache.set(task.notePath, flipped);
+      await api.saveNote(task.notePath, flipped, `Toggle task: ${task.text || task.notePath}`);
+      invalidateCaches();
+      void refreshHeatmap();
+      void refreshSyncBadge();
+      haptic('success');
+    } catch (error) {
+      task.checked = wasChecked; // revert on failure
+      updateTasksBadge();
+      if (!els.views.explorer.hidden && state.currentTab === 'tasks' && state.currentPath === '') renderTasks();
+      showErrorToast(error instanceof api.ApiError ? error : new Error(STRINGS.taskToggleFailed));
+    } finally {
+      if (taskQueues.get(task.notePath) === job) taskQueues.delete(task.notePath);
+    }
+  });
+  taskQueues.set(task.notePath, job);
+}
+
+// ---------------------------------------------------------------------------
+// Reminder deep link (t.me startapp payload) → open the note directly
+// ---------------------------------------------------------------------------
+
+function decodeStartParam(raw) {
+  try {
+    let base64 = String(raw).replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) base64 += '=';
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+// Returns the note target encoded in the launch link: { repositoryId, path }
+// for the new "note:<repoId>:<path>" payload (legacy "note:<path>" →
+// repositoryId null, resolved to the active repository), or null.
+function noteTargetFromStartParam() {
+  const raw = tg()?.initDataUnsafe?.start_param;
+  if (!raw) return null;
+  const payload = decodeStartParam(raw);
+  if (!payload || !payload.startsWith('note:')) return null;
+  const body = payload.slice(5);
+  const sep = body.indexOf(':');
+  if (sep > 0) {
+    const repositoryId = Number(body.slice(0, sep));
+    const path = normPath(body.slice(sep + 1));
+    if (Number.isInteger(repositoryId) && repositoryId > 0 && path) {
+      return { repositoryId, path };
+    }
+  }
+  const path = normPath(body);
+  return path ? { repositoryId: null, path } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -774,8 +1150,9 @@ document.getElementById('view-explorer').addEventListener('touchend', (event) =>
   if (delta > 60 && !els.views.explorer.hidden) {
     pullIndicator.textContent = '…';
     void (async () => {
-      invalidateVaultIndex();
+      invalidateCaches();
       await loadFolder(state.currentPath);
+      void refreshHeatmap();
       pullIndicator.style.transform = '';
       pullIndicator.classList.remove('ready');
       pullIndicator.textContent = '↓';
@@ -870,7 +1247,18 @@ async function leaveEditor({ force = false } = {}) {
     if (!ok) return;
   }
   mainButton.hide();
+  resetEditorDraft();
   await enterExplorer(state.currentPath);
+}
+
+// Clears the editor draft so a stale unsaved note can never leak into the
+// next opened note (openEditor always reloads content anyway).
+function resetEditorDraft() {
+  state.editor = { mode: 'create', path: null, originalContent: null };
+  editor.setValue('');
+  els.notePath.value = '';
+  els.editorStatus.hidden = true;
+  els.previewBanner.hidden = true;
 }
 
 function validateNotePath(rawPath) {
@@ -905,8 +1293,10 @@ async function saveCurrentNote() {
       haptic('success');
       showToast(STRINGS.saved);
     }
-    invalidateVaultIndex();
+    invalidateCaches();
     void refreshSyncBadge();
+    void refreshHeatmap();
+    void refreshTasksData();
     state.editor.originalContent = content;
     state.editor.mode = 'edit';
     state.editor.path = path;
@@ -1166,8 +1556,10 @@ async function restoreVersion(path, commit, btn) {
     await api.restoreNoteVersion(path, commit.sha);
     closeHistoryModal();
     showToast(STRINGS.historyRestored);
-    invalidateVaultIndex();
+    invalidateCaches();
     void refreshSyncBadge();
+    void refreshHeatmap();
+    void refreshTasksData();
 
     // A note open in the editor must show the restored content, not the stale one.
     if (!els.views.editor.hidden && state.editor.mode === 'edit' && state.editor.path === path) {
@@ -1285,8 +1677,10 @@ async function submitMove() {
     haptic('success');
     showToast(STRINGS.moved);
     closeMoveModal();
-    invalidateVaultIndex();
+    invalidateCaches();
     void refreshSyncBadge();
+    void refreshHeatmap();
+    void refreshTasksData();
     // Keep the editor in sync when the open note was moved from the sheet.
     if (state.editor.mode === 'edit' && state.editor.path === fromPath) {
       state.editor.path = toPath;
@@ -1504,10 +1898,12 @@ async function confirmAndDeleteItem(path, displayName, isDir) {
   try {
     if (isDir) showToast(STRINGS.deleting, 10000);
     await api.deleteNote(path);
-    invalidateVaultIndex();
+    invalidateCaches();
     haptic('success');
     showToast(isDir ? STRINGS.deletedFolder : STRINGS.deleted);
     void refreshSyncBadge();
+    void refreshHeatmap();
+    void refreshTasksData();
     if (!els.views.editor.hidden) {
       mainButton.hide();
       await enterExplorer(state.currentPath);
@@ -1544,18 +1940,122 @@ async function openSettings() {
   backButton.show(handleBackNavigation);
   mainButton.hide();
   try {
-    const settings = await api.getSettings();
-    els.settingsOwner.value = settings.repositoryOwner ?? '';
-    els.settingsRepo.value = settings.repositoryName ?? '';
-    els.settingsInboxPath.value = settings.inboxPath ?? '';
-    els.settingsAttachmentsPath.value = settings.attachmentsPath ?? '';
+    await reloadRepositories();
+    const active = state.repositories.find((repo) => repo.isActive) ?? state.repositories[0] ?? null;
+    bindRepoForm(active ? active.id : null);
   } catch (error) {
+    renderRepoList();
     setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
   }
 }
 
+async function reloadRepositories() {
+  state.repositories = await api.listRepositories();
+  renderRepoList();
+}
+
+function repoLabel(repo) {
+  return repo.displayName || `${repo.repositoryOwner}/${repo.repositoryName}`;
+}
+
+function renderRepoList() {
+  const container = els.repoList;
+  container.textContent = '';
+  if (!state.repositories.length) {
+    return; // the form below is bound to "new repository" mode
+  }
+
+  const pencilSvg = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+
+  for (const repo of state.repositories) {
+    const row = document.createElement('div');
+    row.className = 'repo-item' + (repo.isActive ? ' active' : '');
+
+    const main = document.createElement('button');
+    main.type = 'button';
+    main.className = 'repo-item-main';
+    if (!repo.isActive) {
+      main.addEventListener('click', () => void switchToRepository(repo));
+    }
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'repo-item-name';
+    nameEl.textContent = repoLabel(repo);
+    if (repo.isActive) {
+      const check = document.createElement('span');
+      check.className = 'repo-item-check';
+      check.textContent = '✓';
+      nameEl.append(check);
+    }
+
+    const subEl = document.createElement('span');
+    subEl.className = 'repo-item-sub';
+    subEl.textContent = `${repo.repositoryOwner}/${repo.repositoryName}`;
+
+    main.append(nameEl, subEl);
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'repo-item-edit';
+    editBtn.innerHTML = pencilSvg;
+    editBtn.setAttribute('aria-label', t('repoEditTitle'));
+    editBtn.addEventListener('click', () => {
+      haptic('select');
+      bindRepoForm(repo.id);
+    });
+
+    row.append(main, editBtn);
+    container.append(row);
+  }
+}
+
+// Binds the repository edit form to a repository id (null = new repository).
+function bindRepoForm(repoId) {
+  state.repoFormRepoId = repoId;
+  const repo = state.repositories.find((item) => item.id === repoId) ?? null;
+
+  els.repoFormTitle.textContent = t(repo ? 'repoEditTitle' : 'repoNewTitle');
+  els.settingsRepoName.value = repo ? (repo.displayName ?? '') : '';
+  els.settingsOwner.value = repo?.repositoryOwner ?? '';
+  els.settingsRepo.value = repo?.repositoryName ?? '';
+  els.settingsToken.value = '';
+  els.settingsInboxPath.value = repo?.inboxPath ?? 'inbox';
+  els.settingsAttachmentsPath.value = repo?.attachmentsPath ?? 'inbox/attachments';
+  els.repoFormActions.hidden = !repo;
+}
+
+// Activates another repository: drops all explorer/editor state that belongs
+// to the previous one, then reloads the notes list.
+async function switchToRepository(repo) {
+  if (!els.views.editor.hidden) {
+    if (isEditorDirty() && !(await showConfirm(STRINGS.confirmRepoSwitchDirty))) {
+      return;
+    }
+    mainButton.hide();
+  }
+  resetEditorDraft();
+  try {
+    await api.activateRepository(repo.id);
+  } catch (error) {
+    showErrorToast(error);
+    return;
+  }
+  state.repositories = state.repositories.map((item) => ({ ...item, isActive: item.id === repo.id }));
+  state.currentPath = '';
+  els.searchInput.value = '';
+  hideSearchResults();
+  invalidateCaches();
+  renderRepoList();
+  bindRepoForm(repo.id);
+  haptic('success');
+  showToast(STRINGS.repoSwitched(repoLabel(repo)));
+  void refreshSyncBadge();
+  void refreshTasksData();
+}
+
 async function saveSettings() {
   setError(els.settingsError, '');
+  const displayName = els.settingsRepoName.value.trim();
   const owner = els.settingsOwner.value.trim();
   const repo = els.settingsRepo.value.trim();
   const token = els.settingsToken.value.trim();
@@ -1565,8 +2065,36 @@ async function saveSettings() {
     setError(els.settingsError, STRINGS.fillAllFields);
     return;
   }
+
+  const editingId = state.repoFormRepoId;
+  const wasActive = state.repositories.find((item) => item.isActive)?.id;
   try {
-    await api.saveSettings({
+    if (editingId == null) {
+      if (!token) {
+        setError(els.settingsError, STRINGS.repoTokenRequired);
+        return;
+      }
+      const created = await api.createRepository({
+        displayName: displayName || undefined,
+        githubToken: token,
+        repositoryOwner: owner,
+        repositoryName: repo,
+        inboxPath: inboxPath || undefined,
+        attachmentsPath: attachmentsPath || undefined,
+      });
+      localStorage.setItem('gitenberg.autosave', els.settingsAutosave.checked ? '1' : '0');
+      localStorage.setItem('gitenberg.autosync', els.settingsAutosync.checked ? '1' : '0');
+      localStorage.setItem('gitenberg.autosync.interval', els.settingsAutosyncInterval.value);
+      restartAutosyncTimer();
+      await reloadRepositories();
+      bindRepoForm(created.id);
+      haptic('success');
+      showToast(STRINGS.repoCreated);
+      return;
+    }
+
+    await api.updateRepository(editingId, {
+      displayName: displayName || undefined,
       githubToken: token || undefined,
       repositoryOwner: owner,
       repositoryName: repo,
@@ -1577,8 +2105,15 @@ async function saveSettings() {
     localStorage.setItem('gitenberg.autosync', els.settingsAutosync.checked ? '1' : '0');
     localStorage.setItem('gitenberg.autosync.interval', els.settingsAutosyncInterval.value);
     restartAutosyncTimer();
+    await reloadRepositories();
+    bindRepoForm(editingId);
     haptic('success');
     showToast(STRINGS.saved);
+    if (wasActive === editingId) {
+      // The active repository may point somewhere else now — start from the root.
+      state.currentPath = '';
+      invalidateCaches();
+    }
     void enterExplorer(state.currentPath);
   } catch (error) {
     setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
@@ -1592,6 +2127,47 @@ els.settingsBack.addEventListener('click', () => void enterExplorer(state.curren
 els.settingsAutosync.addEventListener('change', () => {
   els.autosyncIntervalField.hidden = !els.settingsAutosync.checked;
 });
+els.btnRepoAdd.addEventListener('click', () => {
+  haptic('select');
+  bindRepoForm(null);
+  els.settingsRepoName.focus();
+});
+els.btnRepoCancelEdit.addEventListener('click', () => {
+  const active = state.repositories.find((repo) => repo.isActive) ?? state.repositories[0] ?? null;
+  bindRepoForm(active ? active.id : null);
+});
+els.btnRepoDelete.addEventListener('click', () => void deleteCurrentRepoForm());
+
+async function deleteCurrentRepoForm() {
+  const repoId = state.repoFormRepoId;
+  if (repoId == null) return;
+  const repo = state.repositories.find((item) => item.id === repoId);
+  if (!repo) return;
+
+  const ok = await showConfirm(STRINGS.confirmRepoDelete(repoLabel(repo)));
+  if (!ok) return;
+  try {
+    await api.deleteRepository(repoId);
+    state.currentPath = '';
+    els.searchInput.value = '';
+    hideSearchResults();
+    invalidateCaches();
+    await reloadRepositories();
+    const active = state.repositories.find((item) => item.isActive) ?? state.repositories[0] ?? null;
+    bindRepoForm(active ? active.id : null);
+    haptic('success');
+    showToast(STRINGS.repoDeleted);
+    void refreshSyncBadge();
+    void refreshTasksData();
+  } catch (error) {
+    if (error instanceof api.ApiError && error.status === 400) {
+      setError(els.settingsError, STRINGS.repoCannotDeleteLast);
+    } else {
+      setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
+    }
+    haptic('error');
+  }
+}
 
 // Export: download a ZIP of the whole repository via the backend.
 async function exportArchive() {
@@ -1655,8 +2231,10 @@ els.btnSync.addEventListener('click', () => {
       showToast(remaining > 0
         ? `${t('syncDonePartial')(applied, remaining)}`
         : t('syncDone')(applied));
-      invalidateVaultIndex();
+      invalidateCaches();
       if (!els.views.explorer.hidden) await loadFolder(state.currentPath);
+      void refreshHeatmap();
+      void refreshTasksData();
     } catch (error) {
       showErrorToast(error);
     } finally {
@@ -1723,8 +2301,17 @@ function restartProbe() {
 async function bootstrap() {
   syncDevBar();
   showView('explorer');
+  state.currentPath = '';
+  els.explorerTabs.hidden = false;
+  els.activityCard.hidden = true;
+  applyActivityCollapsed();
+  showTab(state.currentTab);
   skeletonRows();
   setStatus(STRINGS.loading);
+
+  // Reminder messages deep-link into a note via the startapp payload; the
+  // payload may also carry the repository the note lives in.
+  const deepLink = noteTargetFromStartParam();
 
   try {
     const items = await api.listNotes();
@@ -1732,6 +2319,23 @@ async function bootstrap() {
     state.currentPath = '';
     renderBreadcrumbs('');
     updateBackButton();
+    void refreshHeatmap();
+    void refreshTasksData();
+
+    if (deepLink) {
+      try {
+        if (deepLink.repositoryId) {
+          // Make sure the note's repository is active before opening it.
+          await api.activateRepository(deepLink.repositoryId);
+          invalidateCaches();
+        }
+        // Quiet existence check so a stale link doesn't flash an error toast.
+        await api.getNoteContent(deepLink.path);
+        openEditor('edit', deepLink.path);
+      } catch {
+        /* note is gone — stay in the explorer */
+      }
+    }
   } catch (error) {
     if (error instanceof api.ApiError && error.status === 404) {
       // User not registered yet → registration screen.

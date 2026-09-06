@@ -1,8 +1,10 @@
 using System.Net;
 using FluentAssertions;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Services;
+using Gitenberg.Web.Services.Abstractions;
 using Gitenberg.Tests.Mocks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
@@ -44,24 +46,41 @@ public class SearchEndpointsTests
         var user = new User
         {
             TelegramId = telegramId,
-            GitHubToken = _encryptionService.EncryptToken("pat_123", TimeSpan.FromMinutes(10)),
-            RepositoryOwner = "owner",
-            RepositoryName = "repo",
+            CreatedAt = DateTime.UtcNow,
+            LastActivityAt = DateTime.UtcNow,
         };
         db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var repository = new Gitenberg.Web.Models.Repository
+        {
+            TelegramUserId = telegramId,
+            DisplayName = "owner/repo",
+            RepositoryOwner = "owner",
+            RepositoryName = "repo",
+            GitHubToken = _encryptionService.EncryptToken("pat_123", TimeSpan.FromMinutes(10)),
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Repositories.Add(repository);
+        await db.SaveChangesAsync();
+
+        user.SelectedRepositoryId = repository.Id;
         await db.SaveChangesAsync();
     }
 
     private static Task InsertFtsRowAsync(AppDbContext db, long telegramUserId, string notePath, string content)
     {
         return db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO NoteSearchFts (TelegramUserId, NotePath, Content) VALUES ({telegramUserId.ToString()}, {notePath}, {content})"
+            $"INSERT INTO NoteSearchFts (TelegramUserId, RepositoryId, NotePath, Content) VALUES ({telegramUserId.ToString()}, '1', {notePath}, {content})"
         );
     }
 
+    private IRepositoryContextResolver CreateResolver(AppDbContext db) =>
+        new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance);
+
     private NoteIndexer CreateIndexer(AppDbContext db)
     {
-        return new NoteIndexer(db, new MockGitHubService(), _encryptionService, NullLogger<NoteIndexer>.Instance);
+        return new NoteIndexer(db, new MockGitHubService(), _encryptionService, new ReminderService(db), NullLogger<NoteIndexer>.Instance);
     }
 
     private static List<NoteSearchResult> GetResultsValue(IResult result)
@@ -78,7 +97,7 @@ public class SearchEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", null, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", null, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -94,7 +113,7 @@ public class SearchEndpointsTests
         await SeedUserAsync(db, 12345);
 
         // Act
-        var result = await SearchEndpoints.SearchNotes(null, 12345, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes(null, 12345, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -110,7 +129,7 @@ public class SearchEndpointsTests
         await SeedUserAsync(db, 12345);
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("   ", 12345, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("   ", 12345, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -125,7 +144,7 @@ public class SearchEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -147,7 +166,7 @@ public class SearchEndpointsTests
         );
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -171,7 +190,7 @@ public class SearchEndpointsTests
         await InsertFtsRowAsync(db, 12345, "notes/os-basics.md", "A note about completely different topics.");
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -191,7 +210,7 @@ public class SearchEndpointsTests
         await InsertFtsRowAsync(db, 67890, "notes/other-user.md", "Another note about kernel scheduling.");
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -213,7 +232,7 @@ public class SearchEndpointsTests
 
         // Act - an unbalanced quote used to be invalid FTS5 MATCH syntax;
         // the endpoint now sanitizes it away, so the search succeeds with no matches.
-        var result = await SearchEndpoints.SearchNotes("\"", 12345, null, db, CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("\"", 12345, null, db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         GetResultsValue(result).Should().BeEmpty();

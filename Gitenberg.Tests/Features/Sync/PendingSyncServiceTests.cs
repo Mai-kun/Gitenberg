@@ -38,10 +38,10 @@ public class PendingSyncServiceTests
     {
         await using var db = CreateInMemoryDbContext();
         var pendingSync = CreatePendingSync(db);
-        await pendingSync.EnqueueAsync(1, "save", "notes/idea.md", null, "old content", "Restore note: notes/idea.md (← abcdef1)");
+        await pendingSync.EnqueueAsync(1, 1, "save", "notes/idea.md", null, "old content", "Restore note: notes/idea.md (← abcdef1)");
 
         var gitHubService = new MockGitHubService();
-        var (applied, remaining) = await pendingSync.FlushUserAsync(1, CreateContext(), gitHubService);
+        var (applied, remaining) = await pendingSync.FlushUserAsync(1, 1, CreateContext(), gitHubService);
 
         applied.Should().Be(1);
         remaining.Should().Be(0);
@@ -56,10 +56,10 @@ public class PendingSyncServiceTests
     {
         await using var db = CreateInMemoryDbContext();
         var pendingSync = CreatePendingSync(db);
-        await pendingSync.EnqueueAsync(1, "save", "notes/idea.md", null, "new content");
+        await pendingSync.EnqueueAsync(1, 1, "save", "notes/idea.md", null, "new content");
 
         var gitHubService = new MockGitHubService();
-        await pendingSync.FlushUserAsync(1, CreateContext(), gitHubService);
+        await pendingSync.FlushUserAsync(1, 1, CreateContext(), gitHubService);
 
         gitHubService.SavedNotes.Should().ContainSingle();
         gitHubService.SavedNotes[0].CommitMessage.Should().Be("Update note: notes/idea.md");
@@ -84,11 +84,12 @@ public class PendingSyncServiceTests
             """);
 
         PendingSyncService.EnsureTableCreated(db);
+        db.EnsureRepositoriesTableCreated();
 
         // The migration makes new writes with a commit message work.
         var pendingSync = new PendingSyncService(db);
-        await pendingSync.EnqueueAsync(1, "save", "notes/idea.md", null, "content", "Restore note: notes/idea.md (← abcdef1)");
-        var ops = await pendingSync.GetOpsAsync(1);
+        await pendingSync.EnqueueAsync(1, 1, "save", "notes/idea.md", null, "content", "Restore note: notes/idea.md (← abcdef1)");
+        var ops = await pendingSync.GetOpsAsync(1, 1);
 
         ops.Should().ContainSingle();
         ops[0].CommitMessage.Should().Be("Restore note: notes/idea.md (← abcdef1)");

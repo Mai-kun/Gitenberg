@@ -1,4 +1,6 @@
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Activity;
+using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
@@ -14,8 +16,10 @@ public class UpdateHandler(
     AppDbContext dbContext,
     BotConfiguration botConfig,
     IGitHubService gitHubService,
-    ITokenEncryptionService tokenEncryptionService,
+    IRepositoryContextResolver repositoryResolver,
     InlineSearchHandler inlineSearchHandler,
+    ReminderService reminderService,
+    ActivityService activityService,
     ILogger<UpdateHandler> logger)
 {
     public async Task HandleUpdateAsync(Update update, CancellationToken cancellationToken)
@@ -33,9 +37,21 @@ public class UpdateHandler(
 
         if (message.Text?.StartsWith('/') == true)
         {
-            if (message.Text.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
+            // Bot commands may carry a @BotName suffix when used in groups.
+            var command = message.Text.Split(' ', 2)[0];
+            var mention = command.IndexOf('@');
+            if (mention > 1)
+            {
+                command = command[..mention];
+            }
+
+            if (command.Equals("/start", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleStartCommandAsync(message, cancellationToken);
+            }
+            else if (command.Equals("/remind", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleRemindCommandAsync(message, cancellationToken);
             }
 
             return;
@@ -68,8 +84,12 @@ public class UpdateHandler(
 
             if (user != null)
             {
+                var repository = await repositoryResolver.ResolveActiveAsync(telegramId, cancellationToken);
+                var repoLabel = repository != null
+                    ? $"{repository.Repository.DisplayName} ({repository.Repository.RepositoryOwner}/{repository.Repository.RepositoryName})"
+                    : "не настроен";
                 var text =
-                    $"Привет! Ты успешно авторизован. Твой рабочий репозиторий: {user.RepositoryOwner}/{user.RepositoryName}.";
+                    $"Привет! Ты успешно авторизован. Твой активный репозиторий: {repoLabel}.";
                 await botClient.SendMessage(
                     message.Chat.Id,
                     text,
@@ -118,10 +138,21 @@ public class UpdateHandler(
                 return;
             }
 
-            var decryptedToken = tokenEncryptionService.DecryptToken(user.GitHubToken!);
-            var context = new GitHubRepositoryContext(decryptedToken, user.RepositoryOwner, user.RepositoryName);
-            var inboxPath = user.InboxPath.Trim('/');
-            var attachmentsPath = user.AttachmentsPath.Trim('/');
+            var repository = await repositoryResolver.ResolveActiveAsync(telegramId, cancellationToken);
+            if (repository == null)
+            {
+                await botClient.SendMessage(
+                    message.Chat.Id,
+                    "GitHub-репозиторий не настроен. Откройте настройки в приложении.",
+                    replyMarkup: WebAppKeyboard("Открыть заметки"),
+                    cancellationToken: cancellationToken
+                );
+                return;
+            }
+
+            var context = repository.Context;
+            var inboxPath = repository.Repository.InboxPath.Trim('/');
+            var attachmentsPath = repository.Repository.AttachmentsPath.Trim('/');
 
             var notePath = $"{inboxPath}/{DateTime.UtcNow:yyyy-MM-dd_HH-mm-ss}.md";
 
@@ -132,6 +163,7 @@ public class UpdateHandler(
             var content = QuickCaptureNoteBuilder.BuildNote(text, source, relativeImagePath, DateTime.Now);
 
             await gitHubService.CreateOrUpdateNoteAsync(context, notePath, content, "Add quick capture note");
+            await activityService.RecordAsync(telegramId, null);
 
             await botClient.SendMessage(
                 message.Chat.Id,
@@ -149,6 +181,102 @@ public class UpdateHandler(
                 cancellationToken: cancellationToken
             );
         }
+    }
+
+    // /remind <когда> <текст>: creates a note (quick-capture style) containing
+    // the marker line, then schedules the reminder through the same reconcile
+    // path the marker machinery uses.
+    private async Task HandleRemindCommandAsync(Message message, CancellationToken cancellationToken)
+    {
+        var telegramId = message.From?.Id ?? 0;
+        if (telegramId == 0)
+        {
+            logger.LogWarning("Received /remind command but From user is null or ID is 0.");
+            return;
+        }
+
+        var input = message.Text ?? string.Empty;
+        var firstSpace = input.IndexOf(' ');
+        var spec = firstSpace < 0 ? string.Empty : input[(firstSpace + 1)..].Trim();
+
+        var parsed = ReminderParser.TryParse(spec);
+        if (parsed.FireAtUtc is not { } fireAt)
+        {
+            await botClient.SendMessage(message.Chat.Id, parsed.Error ?? ReminderParser.HelpText, cancellationToken: cancellationToken);
+            return;
+        }
+
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId, cancellationToken);
+        if (user == null)
+        {
+            await botClient.SendMessage(
+                message.Chat.Id,
+                "Сначала зарегистрируйтесь с помощью /start",
+                replyMarkup: WebAppKeyboard("Зарегистрироваться"),
+                cancellationToken: cancellationToken
+            );
+            return;
+        }
+
+        try
+        {
+            var repository = await repositoryResolver.ResolveActiveAsync(telegramId, cancellationToken);
+            if (repository == null)
+            {
+                await botClient.SendMessage(
+                    message.Chat.Id,
+                    "GitHub-репозиторий не настроен. Откройте настройки в приложении.",
+                    replyMarkup: WebAppKeyboard("Открыть заметки"),
+                    cancellationToken: cancellationToken
+                );
+                return;
+            }
+
+            var context = repository.Context;
+            var inboxPath = repository.Repository.InboxPath.Trim('/');
+            var notePath = $"{inboxPath}/{DateTime.UtcNow:yyyy-MM-dd_HH-mm-ss}_reminder.md";
+            var content = BuildReminderNote(fireAt, parsed.Text, spec);
+
+            await gitHubService.CreateOrUpdateNoteAsync(context, notePath, content, $"Add reminder note: {notePath}");
+            await reminderService.UpsertForNoteAsync(telegramId, repository.RepositoryId, notePath, content);
+            await activityService.RecordAsync(telegramId, null);
+
+            await botClient.SendMessage(
+                message.Chat.Id,
+                $"✅ Напоминание на {ReminderService.FormatLocal(fireAt)}\n\n📄 {notePath}",
+                replyMarkup: WebAppKeyboard("Открыть заметки"),
+                cancellationToken: cancellationToken
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling /remind command for Telegram ID: {TelegramId}", telegramId);
+            await botClient.SendMessage(
+                message.Chat.Id,
+                "❌ Не удалось создать напоминание. Попробуйте позже.",
+                cancellationToken: cancellationToken
+            );
+        }
+    }
+
+    // The note embeds the original "@remind …" marker so the reminder stays
+    // reconcilable: editing or erasing the marker later updates or cancels it.
+    private static string BuildReminderNote(DateTime fireAtUtc, string text, string spec)
+    {
+        var lines = new List<string>
+        {
+            $"# Напоминание {ReminderService.FormatLocal(fireAtUtc)}",
+            string.Empty,
+        };
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            lines.Add(text);
+            lines.Add(string.Empty);
+        }
+
+        lines.Add($"@remind {spec}");
+        return string.Join("\n", lines);
     }
 
     /// <summary>

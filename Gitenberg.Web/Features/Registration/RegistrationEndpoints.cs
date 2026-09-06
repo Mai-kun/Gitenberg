@@ -18,11 +18,11 @@ public static class RegistrationEndpoints
 
         group.MapPost("/", RegisterUser)
              .WithName("RegisterUser")
-             .WithSummary("Register or update a user");
+             .WithSummary("Register or update a user (operates on the active repository)");
 
         group.MapGet("/", GetSettings)
              .WithName("GetSettings")
-             .WithSummary("Current repository settings (token is never returned)");
+             .WithSummary("Active repository settings (token is never returned)");
     }
 
     public static async Task<IResult> GetSettings(
@@ -45,13 +45,30 @@ public static class RegistrationEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
+        var repository = await ResolveRepositoryRowAsync(dbContext, user);
+        if (repository == null)
+        {
+            return Results.Ok(new
+            {
+                RepositoryId = (int?)null,
+                DisplayName = (string?)null,
+                RepositoryOwner = string.Empty,
+                RepositoryName = string.Empty,
+                HasToken = false,
+                InboxPath = "inbox",
+                AttachmentsPath = "inbox/attachments",
+            });
+        }
+
         return Results.Ok(new
         {
-            RepositoryOwner = user.RepositoryOwner,
-            RepositoryName = user.RepositoryName,
-            HasToken = !string.IsNullOrWhiteSpace(user.GitHubToken),
-            InboxPath = user.InboxPath,
-            AttachmentsPath = user.AttachmentsPath,
+            RepositoryId = (int?)repository.Id,
+            repository.DisplayName,
+            repository.RepositoryOwner,
+            repository.RepositoryName,
+            HasToken = !string.IsNullOrWhiteSpace(repository.GitHubToken),
+            repository.InboxPath,
+            repository.AttachmentsPath,
         });
     }
 
@@ -89,13 +106,6 @@ public static class RegistrationEndpoints
 
         var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
 
-        // The token is only required on first registration; from the settings
-        // screen it can be omitted to keep the stored one.
-        if (user == null && string.IsNullOrWhiteSpace(request.GitHubToken))
-        {
-            return Results.BadRequest(new { Error = "GitHub token is required." });
-        }
-
         string? encryptedToken = null;
         if (!string.IsNullOrWhiteSpace(request.GitHubToken))
         {
@@ -104,35 +114,100 @@ public static class RegistrationEndpoints
 
         if (user == null)
         {
+            // First registration: the token is mandatory and becomes the
+            // user's first (active) repository.
+            if (encryptedToken == null)
+            {
+                return Results.BadRequest(new { Error = "GitHub token is required." });
+            }
+
             user = new User
             {
                 TelegramId = telegramId,
-                GitHubToken = encryptedToken!,
-                RepositoryOwner = request.RepositoryOwner,
-                RepositoryName = request.RepositoryName,
-                InboxPath = NormalizePath(request.InboxPath) ?? "inbox",
-                AttachmentsPath = NormalizePath(request.AttachmentsPath) ?? "inbox/attachments",
                 CreatedAt = DateTime.UtcNow,
                 LastActivityAt = DateTime.UtcNow,
             };
             dbContext.Users.Add(user);
             await dbContext.SaveChangesAsync();
 
+            var firstRepository = new Repository
+            {
+                TelegramUserId = telegramId,
+                DisplayName = $"{request.RepositoryOwner}/{request.RepositoryName}",
+                RepositoryOwner = request.RepositoryOwner,
+                RepositoryName = request.RepositoryName,
+                GitHubToken = encryptedToken,
+                InboxPath = NormalizePath(request.InboxPath) ?? "inbox",
+                AttachmentsPath = NormalizePath(request.AttachmentsPath) ?? "inbox/attachments",
+                CreatedAt = DateTime.UtcNow,
+            };
+            dbContext.Repositories.Add(firstRepository);
+            await dbContext.SaveChangesAsync();
+
+            user.SelectedRepositoryId = firstRepository.Id;
+            await dbContext.SaveChangesAsync();
+
             return Results.Ok(new { Message = "User registered successfully." });
         }
 
-        if (encryptedToken != null)
+        // Existing user: settings updates go to the active repository; a user
+        // without any repository gets one created from this request.
+        var repository = await ResolveRepositoryRowAsync(dbContext, user);
+        if (repository == null)
         {
-            user.GitHubToken = encryptedToken;
+            if (encryptedToken == null)
+            {
+                return Results.BadRequest(new { Error = "GitHub token is required." });
+            }
+
+            repository = new Repository
+            {
+                TelegramUserId = telegramId,
+                DisplayName = $"{request.RepositoryOwner}/{request.RepositoryName}",
+                RepositoryOwner = request.RepositoryOwner,
+                RepositoryName = request.RepositoryName,
+                GitHubToken = encryptedToken,
+                InboxPath = NormalizePath(request.InboxPath) ?? "inbox",
+                AttachmentsPath = NormalizePath(request.AttachmentsPath) ?? "inbox/attachments",
+                CreatedAt = DateTime.UtcNow,
+            };
+            dbContext.Repositories.Add(repository);
+            await dbContext.SaveChangesAsync();
+
+            user.SelectedRepositoryId = repository.Id;
         }
-        user.RepositoryOwner = request.RepositoryOwner;
-        user.RepositoryName = request.RepositoryName;
-        user.InboxPath = NormalizePath(request.InboxPath) ?? user.InboxPath;
-        user.AttachmentsPath = NormalizePath(request.AttachmentsPath) ?? user.AttachmentsPath;
+        else
+        {
+            repository.RepositoryOwner = request.RepositoryOwner;
+            repository.RepositoryName = request.RepositoryName;
+            repository.InboxPath = NormalizePath(request.InboxPath) ?? repository.InboxPath;
+            repository.AttachmentsPath = NormalizePath(request.AttachmentsPath) ?? repository.AttachmentsPath;
+            if (encryptedToken != null)
+            {
+                repository.GitHubToken = encryptedToken;
+            }
+        }
+
         user.LastActivityAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 
         return Results.Ok(new { Message = "User registration details updated successfully." });
+    }
+
+    // The user's active repository (explicit selection, else the first one).
+    private static async Task<Repository?> ResolveRepositoryRowAsync(AppDbContext dbContext, User user)
+    {
+        var repositories = await dbContext.Repositories
+            .Where(r => r.TelegramUserId == user.TelegramId)
+            .OrderBy(r => r.Id)
+            .ToListAsync();
+
+        if (repositories.Count == 0)
+        {
+            return null;
+        }
+
+        return repositories.FirstOrDefault(r => r.Id == user.SelectedRepositoryId) ?? repositories[0];
     }
 
     // Optional folder settings are trimmed of slashes/whitespace; an empty

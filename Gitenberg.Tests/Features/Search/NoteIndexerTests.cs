@@ -2,6 +2,7 @@ using FluentAssertions;
 using Gitenberg.Tests.Infrastructure.FakeClasses;
 using Gitenberg.Tests.Mocks;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -9,6 +10,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Octokit;
 using Xunit;
+using Repository = Gitenberg.Web.Models.Repository;
 using User = Gitenberg.Web.Models.User;
 
 namespace Gitenberg.Tests.Features.Search;
@@ -39,6 +41,7 @@ public class NoteIndexerTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         dbContext.EnsureFtsTableCreated();
+        ReminderService.EnsureTableCreated(dbContext);
         return dbContext;
     }
 
@@ -77,11 +80,25 @@ public class NoteIndexerTests
         var user = new User
         {
             TelegramId = telegramId,
-            GitHubToken = _encryptionService.EncryptToken("pat_123", TimeSpan.FromMinutes(10)),
-            RepositoryOwner = "owner",
-            RepositoryName = "repo",
+            CreatedAt = DateTime.UtcNow,
+            LastActivityAt = DateTime.UtcNow,
         };
         db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var repository = new Repository
+        {
+            TelegramUserId = telegramId,
+            DisplayName = "owner/repo",
+            RepositoryOwner = "owner",
+            RepositoryName = "repo",
+            GitHubToken = _encryptionService.EncryptToken("pat_123", TimeSpan.FromMinutes(10)),
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Repositories.Add(repository);
+        await db.SaveChangesAsync();
+
+        user.SelectedRepositoryId = repository.Id;
         await db.SaveChangesAsync();
         return user;
     }
@@ -95,7 +112,7 @@ public class NoteIndexerTests
 
     private NoteIndexer CreateIndexer(AppDbContext db)
     {
-        return new NoteIndexer(db, _gitHubService, _encryptionService, _logger);
+        return new NoteIndexer(db, _gitHubService, _encryptionService, new ReminderService(db), _logger);
     }
 
     [Fact]

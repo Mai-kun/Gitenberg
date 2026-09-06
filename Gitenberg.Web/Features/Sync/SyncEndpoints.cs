@@ -1,7 +1,6 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.TelegramBot.Auth;
-using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -21,16 +20,18 @@ public static class SyncEndpoints
 
         group.MapGet("/status", Status)
              .WithName("SyncStatus")
-             .WithSummary("Number of local changes waiting to be synced to GitHub");
+             .WithSummary("Number of local changes of the active repository waiting to be synced to GitHub");
 
         group.MapPost("/", FlushNow)
              .WithName("SyncFlush")
-             .WithSummary("Force-sync all pending local changes to GitHub right now");
+             .WithSummary("Force-sync all pending local changes of every repository to GitHub right now");
     }
 
     public static async Task<IResult> Status(
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
+        AppDbContext dbContext,
+        IRepositoryContextResolver repositoryResolver,
         PendingSyncService pendingSync,
         HttpContext? httpContext = null
     )
@@ -42,7 +43,13 @@ public static class SyncEndpoints
                 new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
         }
 
-        return Results.Ok(new { Pending = await pendingSync.GetPendingCountAsync(telegramId.Value) });
+        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        if (repository == null)
+        {
+            return Results.Ok(new { Pending = 0 });
+        }
+
+        return Results.Ok(new { Pending = await pendingSync.GetPendingCountAsync(telegramId.Value, repository.RepositoryId) });
     }
 
     public static async Task<IResult> FlushNow(
@@ -51,7 +58,7 @@ public static class SyncEndpoints
         AppDbContext dbContext,
         PendingSyncService pendingSync,
         IGitHubService gitHubService,
-        ITokenEncryptionService encryptionService,
+        IRepositoryContextResolver repositoryResolver,
         IMemoryCache memoryCache,
         NoteIndexer indexer,
         HttpContext? httpContext = null
@@ -70,33 +77,54 @@ public static class SyncEndpoints
             return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
         }
 
-        if (string.IsNullOrWhiteSpace(user.GitHubToken))
+        // Ops live per repository, and a previous session may have switched
+        // repositories with unsynced changes — flush every repository, the
+        // badge keeps tracking the active one.
+        var repositories = await dbContext.Repositories
+            .Where(r => r.TelegramUserId == telegramId)
+            .OrderBy(r => r.Id)
+            .ToListAsync();
+
+        var appliedTotal = 0;
+        var remainingTotal = 0;
+        var activeRepositoryId = (await repositoryResolver.ResolveActiveAsync(telegramId.Value))?.RepositoryId;
+
+        foreach (var repository in repositories)
         {
-            return Results.BadRequest(new { Error = "GitHub token is not configured for this user." });
+            var resolved = await repositoryResolver.ResolveByIdAsync(telegramId.Value, repository.Id);
+            if (resolved == null)
+            {
+                // No usable token: leave this repository's ops queued.
+                remainingTotal += await pendingSync.GetPendingCountAsync(telegramId.Value, repository.Id);
+                continue;
+            }
+
+            var (applied, remaining) = await pendingSync.FlushUserAsync(telegramId.Value, repository.Id, resolved.Context, gitHubService);
+            appliedTotal += applied;
+            remainingTotal += remaining;
+            if (applied > 0)
+            {
+                BustUserCache(memoryCache, telegramId.Value, repository.Id);
+            }
         }
-
-        var context = new GitHubRepositoryContext(
-            encryptionService.DecryptToken(user.GitHubToken), user.RepositoryOwner, user.RepositoryName);
-
-        var (applied, remaining) = await pendingSync.FlushUserAsync(telegramId.Value, context, gitHubService);
-        BustUserCache(memoryCache, telegramId.Value);
 
         try
         {
-            // Re-index so the search sees the freshly flushed content.
-            await indexer.SynchronizeUserByIdAsync(telegramId.Value);
+            // Re-index the active repository so search sees the freshly
+            // flushed content.
+            await indexer.SynchronizeUserByIdAsync(telegramId.Value, activeRepositoryId);
         }
         catch
         {
             // Search freshness is best-effort.
         }
 
-        return Results.Ok(new { Applied = applied, Remaining = remaining });
+        return Results.Ok(new { Applied = appliedTotal, Remaining = remainingTotal });
     }
 
-    private static void BustUserCache(IMemoryCache memoryCache, long telegramId)
+    private static void BustUserCache(IMemoryCache memoryCache, long telegramId, int repositoryId)
     {
-        var ctsKey = $"notes_cts_{telegramId}";
+        var ctsKey = $"notes_cts_{telegramId}_{repositoryId}";
         if (memoryCache.TryGetValue(ctsKey, out CancellationTokenSource? cts))
         {
             cts?.Cancel();
@@ -150,31 +178,50 @@ public class SyncFlushService(
         var encryptionService = scope.ServiceProvider.GetRequiredService<ITokenEncryptionService>();
         var memoryCache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
 
-        var userIds = await dbContext.Database
-            .SqlQuery<string>($"SELECT DISTINCT TelegramUserId AS Value FROM PendingNoteOps")
+        // Only repositories with queued ops are touched, and each is flushed
+        // into its own GitHub repository with its own token.
+        var queued = await dbContext.Database
+            .SqlQuery<QueuedRepoRow>($"""
+                SELECT CAST(TelegramUserId AS INTEGER) AS TelegramUserId, CAST(RepositoryId AS INTEGER) AS RepositoryId
+                FROM PendingNoteOps
+                GROUP BY TelegramUserId, RepositoryId
+                """)
             .ToListAsync();
 
-        foreach (var uid in userIds)
+        foreach (var row in queued)
         {
-            if (!long.TryParse(uid, out var telegramId)) continue;
-            var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
-            if (user?.GitHubToken == null || string.IsNullOrWhiteSpace(user.GitHubToken)) continue;
+            var telegramId = row.TelegramUserId;
+            var repository = await dbContext.Repositories
+                .FirstOrDefaultAsync(r => r.Id == row.RepositoryId && r.TelegramUserId == telegramId);
+            if (repository?.GitHubToken == null || string.IsNullOrWhiteSpace(repository.GitHubToken)) continue;
 
-            var context = new GitHubRepositoryContext(
-                encryptionService.DecryptToken(user.GitHubToken), user.RepositoryOwner, user.RepositoryName);
-            var (applied, remaining) = await pendingSync.FlushUserAsync(telegramId, context, gitHubService);
+            GitHubRepositoryContext context;
+            try
+            {
+                context = new GitHubRepositoryContext(
+                    encryptionService.DecryptToken(repository.GitHubToken), repository.RepositoryOwner, repository.RepositoryName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Skipping flush for repository {RepositoryId}: token could not be decrypted.", repository.Id);
+                continue;
+            }
+
+            var (applied, remaining) = await pendingSync.FlushUserAsync(telegramId, repository.Id, context, gitHubService);
             if (applied > 0)
             {
-                BustUserCache(memoryCache, telegramId);
-                logger.LogInformation("Flushed {Applied} pending ops for user {TelegramId} ({Remaining} left).",
-                    applied, telegramId, remaining);
+                BustUserCache(memoryCache, telegramId, repository.Id);
+                logger.LogInformation("Flushed {Applied} pending ops for user {TelegramId} repository {RepositoryId} ({Remaining} left).",
+                    applied, telegramId, repository.Id, remaining);
             }
         }
     }
 
-    private static void BustUserCache(IMemoryCache memoryCache, long telegramId)
+    private sealed record QueuedRepoRow(long TelegramUserId, int RepositoryId);
+
+    private static void BustUserCache(IMemoryCache memoryCache, long telegramId, int repositoryId)
     {
-        var ctsKey = $"notes_cts_{telegramId}";
+        var ctsKey = $"notes_cts_{telegramId}_{repositoryId}";
         if (memoryCache.TryGetValue(ctsKey, out CancellationTokenSource? cts))
         {
             cts?.Cancel();

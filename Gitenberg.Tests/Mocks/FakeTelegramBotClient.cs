@@ -50,6 +50,12 @@ public class FakeTelegramBotClient : ITelegramBotClient
             return Task.FromResult((TResponse)(object)FileToReturn);
         }
 
+        if (request is GetMeRequest)
+        {
+            var me = new Telegram.Bot.Types.User { Id = 123456, IsBot = true, Username = "testbot" };
+            return Task.FromResult((TResponse)(object)me);
+        }
+
         if (request is AnswerInlineQueryRequest answerInlineQuery)
         {
             AnsweredInlineQueries.Add(answerInlineQuery);

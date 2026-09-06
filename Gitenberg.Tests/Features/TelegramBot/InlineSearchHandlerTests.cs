@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Services;
@@ -13,6 +14,7 @@ using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.InlineQueryResults;
 using Xunit;
+using Repository = Gitenberg.Web.Models.Repository;
 using User = Gitenberg.Web.Models.User;
 
 namespace Gitenberg.Tests.Features.TelegramBot;
@@ -46,6 +48,7 @@ public class InlineSearchHandlerTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         dbContext.EnsureFtsTableCreated();
+        ReminderService.EnsureTableCreated(dbContext);
         return dbContext;
     }
 
@@ -84,23 +87,38 @@ public class InlineSearchHandlerTests
         var user = new User
         {
             TelegramId = telegramId,
-            GitHubToken = _encryptionService.EncryptToken("pat_123", TimeSpan.FromMinutes(10)),
-            RepositoryOwner = "owner",
-            RepositoryName = "repo",
+            CreatedAt = DateTime.UtcNow,
+            LastActivityAt = DateTime.UtcNow,
         };
         db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var repository = new Repository
+        {
+            TelegramUserId = telegramId,
+            DisplayName = "owner/repo",
+            RepositoryOwner = "owner",
+            RepositoryName = "repo",
+            GitHubToken = _encryptionService.EncryptToken("pat_123", TimeSpan.FromMinutes(10)),
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Repositories.Add(repository);
+        await db.SaveChangesAsync();
+
+        user.SelectedRepositoryId = repository.Id;
         await db.SaveChangesAsync();
         return user;
     }
 
     private InlineSearchHandler CreateHandler(AppDbContext db)
     {
-        var indexer = new NoteIndexer(db, _gitHubService, _encryptionService, NullLogger<NoteIndexer>.Instance);
+        var indexer = new NoteIndexer(db, _gitHubService, _encryptionService, new ReminderService(db), NullLogger<NoteIndexer>.Instance);
         var fileLinks = new InlineFileLinkService(_botConfig);
         return new InlineSearchHandler(
             _botClient,
             db,
             _botConfig,
+            new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance),
             indexer,
             fileLinks,
             NullLogger<InlineSearchHandler>.Instance

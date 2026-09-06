@@ -1363,3 +1363,325 @@ input, textarea {
   padding: 12px;
   font-size: 13px;
 }
+
+/* ==========================================================================
+   Explorer tabs: Notes | Tasks (root level only)
+   ========================================================================== */
+
+.explorer-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 8px var(--pad) 0;
+  padding: 3px;
+  background: var(--tg-secondary);
+  border-radius: 10px;
+}
+
+.explorer-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tg-hint);
+}
+
+.explorer-tab.is-active {
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.tab-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Activity heatmap (GitHub contribution style)
+   ========================================================================== */
+
+.activity-card {
+  margin: 10px var(--pad) 0;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.activity-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.activity-summary {
+  font-size: 13px;
+  color: var(--tg-hint);
+}
+
+.activity-chevron {
+  color: var(--tg-hint);
+  font-size: 12px;
+}
+
+.activity-body {
+  padding: 0 12px 10px;
+}
+
+.heatmap-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 11px);
+  grid-auto-columns: 11px;
+  gap: 3px;
+  width: max-content;
+}
+
+.heatmap-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--hm-0);
+}
+
+.heatmap-cell.level-1 { background: var(--hm-1); }
+.heatmap-cell.level-2 { background: var(--hm-2); }
+.heatmap-cell.level-3 { background: var(--hm-3); }
+.heatmap-cell.level-4 { background: var(--hm-4); }
+.heatmap-cell.is-future { visibility: hidden; }
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 6px;
+  justify-content: flex-end;
+  font-size: 11px;
+  color: var(--tg-hint);
+}
+
+/* GitHub-like green ramps for light and dark environments. */
+:root {
+  --hm-0: #ebedf0;
+  --hm-1: #9be9a8;
+  --hm-2: #40c463;
+  --hm-3: #30a14e;
+  --hm-4: #216e39;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hm-0: #1c2128;
+    --hm-1: #0e4429;
+    --hm-2: #006d32;
+    --hm-3: #26a641;
+    --hm-4: #39d353;
+  }
+}
+
+/* ==========================================================================
+   Tasks tab: aggregated checklists
+   ========================================================================== */
+
+.tasks-toolbar {
+  display: flex;
+  gap: 8px;
+  margin: 10px var(--pad) 0;
+}
+
+.filter-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--tg-section-sep);
+  font-size: 13px;
+  color: var(--tg-hint);
+}
+
+.filter-chip.is-active {
+  background: var(--tg-button);
+  border-color: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+.tasks-list {
+  flex: 1;
+  padding: 8px var(--pad) 96px;
+}
+
+.task-group {
+  margin-bottom: 14px;
+}
+
+.task-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 2px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tg-hint);
+}
+
+.task-group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-group-count {
+  flex: none;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--tg-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--tg-section-sep);
+}
+
+.task-row:last-child {
+  border-bottom: none;
+}
+
+.task-check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 2px solid var(--tg-hint);
+  border-radius: 6px;
+  color: var(--tg-button-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.task-row.is-done .task-check {
+  background: var(--tg-button);
+  border-color: var(--tg-button);
+}
+
+.task-text {
+  flex: 1;
+  text-align: left;
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.task-row.is-done .task-text {
+  color: var(--tg-hint);
+  text-decoration: line-through;
+}
+
+/* ---------------------------------------------------------------------------
+ * Multi-repo: repository switcher in settings
+ * ------------------------------------------------------------------------- */
+
+.repo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repo-item {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.repo-item.active {
+  border-color: var(--tg-button);
+}
+
+.repo-item-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+  min-width: 0;
+}
+
+.repo-item-name {
+  font-weight: 600;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.repo-item-check {
+  color: var(--tg-button);
+  font-weight: 700;
+}
+
+.repo-item-sub {
+  font-size: 13px;
+  color: var(--tg-hint);
+  overflow-wrap: anywhere;
+}
+
+.repo-item-edit {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--tg-hint);
+  border-left: 1px solid var(--tg-section-sep);
+}
+
+.repo-item-edit:active {
+  color: var(--tg-text);
+}
+
+.repo-add-btn {
+  margin-top: 4px;
+}
+
+.repo-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.btn-danger-text {
+  color: var(--tg-destructive);
+}
