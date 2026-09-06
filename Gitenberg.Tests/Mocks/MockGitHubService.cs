@@ -11,6 +11,8 @@ public class MockGitHubService : IGitHubService
     public Func<GitHubRepositoryContext, string, string, string, Task>? CreateOrUpdateNoteFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, Task>? DeleteNoteFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, string?, string, Task>? MoveNoteFunc { get; set; }
+    public Func<GitHubRepositoryContext, string, byte[], string, Task>? UploadBinaryFileFunc { get; set; }
+    public List<(string Path, byte[] Content, string CommitMessage)> UploadedBinaries { get; } = new();
 
     public Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(GitHubRepositoryContext context, string? path = null)
     {
@@ -55,6 +57,19 @@ public class MockGitHubService : IGitHubService
     {
         return MoveNoteFunc != null
             ? MoveNoteFunc(context, fromPath, toPath, content, commitMessage)
+            : Task.CompletedTask;
+    }
+
+    public Task UploadBinaryFileAsync(
+        GitHubRepositoryContext context,
+        string path,
+        byte[] contentBytes,
+        string commitMessage
+    )
+    {
+        UploadedBinaries.Add((path, contentBytes, commitMessage));
+        return UploadBinaryFileFunc != null
+            ? UploadBinaryFileFunc(context, path, contentBytes, commitMessage)
             : Task.CompletedTask;
     }
 }

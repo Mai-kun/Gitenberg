@@ -6,12 +6,26 @@ namespace Gitenberg.Web.Services;
 
 public class GitHubService : IGitHubService
 {
+    // Test seam: when set, this client is used instead of creating one per call.
+    private readonly IGitHubClient? _clientOverride;
+
+    public GitHubService()
+    {
+    }
+
+    internal GitHubService(IGitHubClient clientOverride)
+    {
+        _clientOverride = clientOverride;
+    }
+
+    private IGitHubClient ResolveClient(string token) => _clientOverride ?? CreateClient(token);
+
     public async Task<IReadOnlyList<RepositoryContent>> GetNotesAsync(
         GitHubRepositoryContext context,
         string? path = null
     )
     {
-        var client = CreateClient(context.Token);
+        var client = ResolveClient(context.Token);
         return string.IsNullOrEmpty(path)
             ? await client.Repository.Content.GetAllContents(context.Owner, context.Repo)
             : await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
@@ -64,7 +78,7 @@ public class GitHubService : IGitHubService
         string commitMessage
     )
     {
-        var client = CreateClient(context.Token);
+        var client = ResolveClient(context.Token);
 
         try
         {
@@ -91,7 +105,7 @@ public class GitHubService : IGitHubService
 
     public async Task DeleteNoteAsync(GitHubRepositoryContext context, string path, string commitMessage)
     {
-        var client = CreateClient(context.Token);
+        var client = ResolveClient(context.Token);
         var contents = await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
 
         // A file path returns a single entry whose Path matches the request;
@@ -118,7 +132,7 @@ public class GitHubService : IGitHubService
     }
 
     private static async Task DeleteFolderRecursiveAsync(
-        GitHubClient client,
+        IGitHubClient client,
         GitHubRepositoryContext context,
         string path,
         string commitMessage
@@ -166,7 +180,7 @@ public class GitHubService : IGitHubService
             throw new ArgumentException($"Cannot move '{fromPath}' inside itself.");
         }
 
-        var client = CreateClient(context.Token);
+        var client = ResolveClient(context.Token);
 
         var contents = await client.Repository.Content.GetAllContents(context.Owner, context.Repo, normalizedFrom);
         var first = contents.Count > 0 ? contents[0] : null;
@@ -216,7 +230,7 @@ public class GitHubService : IGitHubService
     }
 
     private async Task MoveFolderRecursiveAsync(
-        GitHubClient client,
+        IGitHubClient client,
         GitHubRepositoryContext context,
         string fromDir,
         string toDir,
@@ -249,6 +263,26 @@ public class GitHubService : IGitHubService
                 );
             }
         }
+    }
+
+    public async Task UploadBinaryFileAsync(
+        GitHubRepositoryContext context,
+        string path,
+        byte[] contentBytes,
+        string commitMessage
+    )
+    {
+        var client = ResolveClient(context.Token);
+
+        // convertContentToBase64=false: the payload is already Base64-encoded here,
+        // letting Octokit encode it again would corrupt the binary content.
+        var request = new CreateFileRequest(
+            commitMessage,
+            Convert.ToBase64String(contentBytes),
+            false
+        );
+
+        await client.Repository.Content.CreateFile(context.Owner, context.Repo, path, request);
     }
 
     private static GitHubClient CreateClient(string token)

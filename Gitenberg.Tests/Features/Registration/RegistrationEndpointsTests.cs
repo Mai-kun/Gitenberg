@@ -197,4 +197,124 @@ public class RegistrationEndpointsTests
         user.CreatedAt.Should().BeCloseTo(DateTime.UtcNow.AddDays(-1), TimeSpan.FromSeconds(5));
         user.LastActivityAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
+
+    [Fact]
+    public async Task RegisterUser_ShouldSaveCustomPaths_WhenProvided()
+    {
+        // Arrange
+        await using var db = CreateInMemoryDbContext();
+        var request = new RegisterUserRequest(
+            12345, "token", "owner", "repo",
+            InboxPath: "/my-notes/",
+            AttachmentsPath: " assets/photos "
+        );
+
+        // Act
+        var result = await RegistrationEndpoints.RegisterUser(request, db, _encryptionService);
+
+        // Assert
+        var statusCodeResult = result as IStatusCodeHttpResult;
+        statusCodeResult.Should().NotBeNull();
+        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
+        user.Should().NotBeNull();
+        user!.InboxPath.Should().Be("my-notes");
+        user.AttachmentsPath.Should().Be("assets/photos");
+    }
+
+    [Fact]
+    public async Task RegisterUser_ShouldUseDefaultPaths_WhenPathsAreOmitted()
+    {
+        // Arrange
+        await using var db = CreateInMemoryDbContext();
+        var request = new RegisterUserRequest(12345, "token", "owner", "repo");
+
+        // Act
+        var result = await RegistrationEndpoints.RegisterUser(request, db, _encryptionService);
+
+        // Assert
+        var statusCodeResult = result as IStatusCodeHttpResult;
+        statusCodeResult.Should().NotBeNull();
+        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
+        user.Should().NotBeNull();
+        user!.InboxPath.Should().Be("inbox");
+        user.AttachmentsPath.Should().Be("inbox/attachments");
+    }
+
+    [Fact]
+    public async Task RegisterUser_ShouldKeepExistingPaths_WhenPathsAreOmittedOnUpdate()
+    {
+        // Arrange
+        await using var db = CreateInMemoryDbContext();
+        var existingUser = new User
+        {
+            TelegramId = 12345,
+            GitHubToken = _encryptionService.EncryptToken("old_token", TimeSpan.FromMinutes(10)),
+            RepositoryOwner = "old_owner",
+            RepositoryName = "old_repo",
+            InboxPath = "my-notes",
+            AttachmentsPath = "assets/photos",
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            LastActivityAt = DateTime.UtcNow.AddDays(-1)
+        };
+        db.Users.Add(existingUser);
+        await db.SaveChangesAsync();
+
+        var request = new RegisterUserRequest(12345, "new_token", "new_owner", "new_repo");
+
+        // Act
+        var result = await RegistrationEndpoints.RegisterUser(request, db, _encryptionService);
+
+        // Assert
+        var statusCodeResult = result as IStatusCodeHttpResult;
+        statusCodeResult.Should().NotBeNull();
+        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
+        user.Should().NotBeNull();
+        user!.InboxPath.Should().Be("my-notes");
+        user.AttachmentsPath.Should().Be("assets/photos");
+    }
+
+    [Fact]
+    public async Task RegisterUser_ShouldUpdatePaths_WhenNewPathsProvidedOnUpdate()
+    {
+        // Arrange
+        await using var db = CreateInMemoryDbContext();
+        var existingUser = new User
+        {
+            TelegramId = 12345,
+            GitHubToken = _encryptionService.EncryptToken("old_token", TimeSpan.FromMinutes(10)),
+            RepositoryOwner = "old_owner",
+            RepositoryName = "old_repo",
+            InboxPath = "my-notes",
+            AttachmentsPath = "assets/photos",
+            CreatedAt = DateTime.UtcNow.AddDays(-1),
+            LastActivityAt = DateTime.UtcNow.AddDays(-1)
+        };
+        db.Users.Add(existingUser);
+        await db.SaveChangesAsync();
+
+        var request = new RegisterUserRequest(
+            12345, "new_token", "new_owner", "new_repo",
+            InboxPath: "notes",
+            AttachmentsPath: "notes/media"
+        );
+
+        // Act
+        var result = await RegistrationEndpoints.RegisterUser(request, db, _encryptionService);
+
+        // Assert
+        var statusCodeResult = result as IStatusCodeHttpResult;
+        statusCodeResult.Should().NotBeNull();
+        statusCodeResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.TelegramId == 12345);
+        user.Should().NotBeNull();
+        user!.InboxPath.Should().Be("notes");
+        user.AttachmentsPath.Should().Be("notes/media");
+    }
 }

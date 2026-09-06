@@ -50,6 +50,8 @@ public static class RegistrationEndpoints
             RepositoryOwner = user.RepositoryOwner,
             RepositoryName = user.RepositoryName,
             HasToken = !string.IsNullOrWhiteSpace(user.GitHubToken),
+            InboxPath = user.InboxPath,
+            AttachmentsPath = user.AttachmentsPath,
         });
     }
 
@@ -108,6 +110,8 @@ public static class RegistrationEndpoints
                 GitHubToken = encryptedToken!,
                 RepositoryOwner = request.RepositoryOwner,
                 RepositoryName = request.RepositoryName,
+                InboxPath = NormalizePath(request.InboxPath) ?? "inbox",
+                AttachmentsPath = NormalizePath(request.AttachmentsPath) ?? "inbox/attachments",
                 CreatedAt = DateTime.UtcNow,
                 LastActivityAt = DateTime.UtcNow,
             };
@@ -123,9 +127,24 @@ public static class RegistrationEndpoints
         }
         user.RepositoryOwner = request.RepositoryOwner;
         user.RepositoryName = request.RepositoryName;
+        user.InboxPath = NormalizePath(request.InboxPath) ?? user.InboxPath;
+        user.AttachmentsPath = NormalizePath(request.AttachmentsPath) ?? user.AttachmentsPath;
         user.LastActivityAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 
         return Results.Ok(new { Message = "User registration details updated successfully." });
+    }
+
+    // Optional folder settings are trimmed of slashes/whitespace; an empty
+    // result keeps the stored (or default) value.
+    private static string? NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var trimmed = path.Trim().Trim('/');
+        return trimmed.Length == 0 ? null : trimmed;
     }
 }

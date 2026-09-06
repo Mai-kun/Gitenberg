@@ -494,3 +494,4 @@ Gitenberg.Web/appsettings.Development.json
 data/
 keys/
 temp-keys/
+.roo/commands/

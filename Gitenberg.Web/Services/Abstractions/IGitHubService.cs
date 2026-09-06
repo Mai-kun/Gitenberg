@@ -24,4 +24,11 @@ public interface IGitHubService
         string? content,
         string commitMessage
     );
+
+    public Task UploadBinaryFileAsync(
+        GitHubRepositoryContext context,
+        string path,
+        byte[] contentBytes,
+        string commitMessage
+    );
 }

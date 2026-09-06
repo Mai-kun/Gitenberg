@@ -70,6 +70,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
     db.EnsureFtsTableCreated();
+    db.EnsureUserCaptureColumnsCreated();
     PendingSyncService.EnsureTableCreated(db);
 }
 

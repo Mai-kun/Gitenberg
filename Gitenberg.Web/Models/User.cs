@@ -13,4 +13,8 @@ public class User
     public DateTime CreatedAt { get; set; }
 
     public DateTime LastActivityAt { get; set; }
+
+    public string InboxPath { get; set; } = "inbox";
+
+    public string AttachmentsPath { get; set; } = "inbox/attachments";
 }

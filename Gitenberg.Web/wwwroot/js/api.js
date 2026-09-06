@@ -115,9 +115,16 @@ async function request(method, path, { params, body } = {}) {
 // Typed helpers (exact backend contract, camelCase wire names)
 // ---------------------------------------------------------------------------
 
-export function registerUser(telegramId, githubToken, repositoryOwner, repositoryName) {
+export function registerUser(telegramId, githubToken, repositoryOwner, repositoryName, { inboxPath, attachmentsPath } = {}) {
   return request('POST', '/api/register', {
-    body: { telegramId, githubToken, repositoryOwner, repositoryName },
+    body: {
+      telegramId,
+      githubToken,
+      repositoryOwner,
+      repositoryName,
+      ...(inboxPath ? { inboxPath } : {}),
+      ...(attachmentsPath ? { attachmentsPath } : {}),
+    },
   });
 }
 
@@ -168,12 +175,14 @@ export function getSettings() {
   return request('GET', '/api/register');
 }
 
-export function saveSettings({ githubToken, repositoryOwner, repositoryName }) {
+export function saveSettings({ githubToken, repositoryOwner, repositoryName, inboxPath, attachmentsPath }) {
   return request('POST', '/api/register', {
     body: {
       ...(githubToken ? { githubToken } : {}),
       repositoryOwner,
       repositoryName,
+      ...(inboxPath ? { inboxPath } : {}),
+      ...(attachmentsPath ? { attachmentsPath } : {}),
     },
   });
 }

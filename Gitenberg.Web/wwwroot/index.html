@@ -49,6 +49,14 @@
           <label for="reg-repo" data-i18n="regRepo">Название репозитория</label>
           <input id="reg-repo" type="text" autocomplete="off" placeholder="my-notes" required>
         </div>
+        <div class="field">
+          <label for="reg-inbox-path" data-i18n="inboxPathLabel">Папка для заметок</label>
+          <input id="reg-inbox-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="inboxPathPlaceholder" placeholder="inbox">
+        </div>
+        <div class="field">
+          <label for="reg-attachments-path" data-i18n="attachmentsPathLabel">Папка для фото</label>
+          <input id="reg-attachments-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="attachmentsPathPlaceholder" placeholder="inbox/attachments">
+        </div>
 
         <div id="register-error" class="error-text" hidden></div>
 
@@ -167,6 +175,14 @@
       <div class="field">
         <label for="settings-token" data-i18n="settingsToken">Новый GitHub Token</label>
         <input id="settings-token" type="password" autocomplete="off" data-i18n-placeholder="settingsTokenHint" placeholder="Оставьте пустым, чтобы сохранить текущий">
+      </div>
+      <div class="field">
+        <label for="settings-inbox-path" data-i18n="inboxPathLabel">Папка для заметок</label>
+        <input id="settings-inbox-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="inboxPathPlaceholder" placeholder="inbox">
+      </div>
+      <div class="field">
+        <label for="settings-attachments-path" data-i18n="attachmentsPathLabel">Папка для фото</label>
+        <input id="settings-attachments-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="attachmentsPathPlaceholder" placeholder="inbox/attachments">
       </div>
       <label class="settings-toggle">
         <input id="settings-autosave" type="checkbox">

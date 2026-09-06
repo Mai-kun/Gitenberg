@@ -129,6 +129,8 @@ const els = {
   regToken: $('reg-token'),
   regOwner: $('reg-owner'),
   regRepo: $('reg-repo'),
+  regInboxPath: $('reg-inbox-path'),
+  regAttachmentsPath: $('reg-attachments-path'),
   registerError: $('register-error'),
   registerSubmit: $('register-submit'),
   explorerTitle: $('explorer-title'),
@@ -185,6 +187,8 @@ const els = {
   settingsOwner: $('settings-owner'),
   settingsRepo: $('settings-repo'),
   settingsToken: $('settings-token'),
+  settingsInboxPath: $('settings-inbox-path'),
+  settingsAttachmentsPath: $('settings-attachments-path'),
   settingsAutosave: $('settings-autosave'),
   settingsAutosync: $('settings-autosync'),
   settingsError: $('settings-error'),
@@ -327,6 +331,8 @@ els.registerForm.addEventListener('submit', async (event) => {
   const token = els.regToken.value.trim();
   const owner = els.regOwner.value.trim();
   const repo = els.regRepo.value.trim();
+  const inboxPath = els.regInboxPath.value.trim().replace(/^\/+|\/+$/g, '');
+  const attachmentsPath = els.regAttachmentsPath.value.trim().replace(/^\/+|\/+$/g, '');
   if (!token || !owner || !repo) {
     setError(els.registerError, STRINGS.fillAllFields);
     return;
@@ -334,7 +340,10 @@ els.registerForm.addEventListener('submit', async (event) => {
 
   setButtonBusy(els.registerSubmit, true, STRINGS.registerBtnBusy, STRINGS.registerBtnIdle);
   try {
-    await api.registerUser(currentTelegramId(), token, owner, repo);
+    await api.registerUser(currentTelegramId(), token, owner, repo, {
+      inboxPath: inboxPath || undefined,
+      attachmentsPath: attachmentsPath || undefined,
+    });
     haptic('success');
     await enterExplorer('');
   } catch (error) {
@@ -1264,6 +1273,8 @@ async function openSettings() {
     const settings = await api.getSettings();
     els.settingsOwner.value = settings.repositoryOwner ?? '';
     els.settingsRepo.value = settings.repositoryName ?? '';
+    els.settingsInboxPath.value = settings.inboxPath ?? '';
+    els.settingsAttachmentsPath.value = settings.attachmentsPath ?? '';
   } catch (error) {
     setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
   }
@@ -1274,12 +1285,20 @@ async function saveSettings() {
   const owner = els.settingsOwner.value.trim();
   const repo = els.settingsRepo.value.trim();
   const token = els.settingsToken.value.trim();
+  const inboxPath = els.settingsInboxPath.value.trim().replace(/^\/+|\/+$/g, '');
+  const attachmentsPath = els.settingsAttachmentsPath.value.trim().replace(/^\/+|\/+$/g, '');
   if (!owner || !repo) {
     setError(els.settingsError, STRINGS.fillAllFields);
     return;
   }
   try {
-    await api.saveSettings({ githubToken: token || undefined, repositoryOwner: owner, repositoryName: repo });
+    await api.saveSettings({
+      githubToken: token || undefined,
+      repositoryOwner: owner,
+      repositoryName: repo,
+      inboxPath: inboxPath || undefined,
+      attachmentsPath: attachmentsPath || undefined,
+    });
     localStorage.setItem('gitenberg.autosave', els.settingsAutosave.checked ? '1' : '0');
     localStorage.setItem('gitenberg.autosync', els.settingsAutosync.checked ? '1' : '0');
     localStorage.setItem('gitenberg.autosync.interval', els.settingsAutosyncInterval.value);
