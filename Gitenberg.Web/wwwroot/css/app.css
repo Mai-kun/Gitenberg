@@ -267,11 +267,15 @@ input, textarea {
 
 .search-wrap {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 var(--pad) 10px;
 }
 
 #search-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 10px 38px 10px 14px;
   border: none;
   border-radius: 10px;
@@ -280,6 +284,35 @@ input, textarea {
 }
 
 #search-input::-webkit-search-cancel-button { display: none; }
+
+.search-find {
+  flex-shrink: 0;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.search-find:disabled { opacity: 0.7; }
+
+.search-find .spinner {
+  display: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-rotate 0.7s linear infinite;
+}
+
+.search-find.busy .spinner { display: inline-block; }
+.search-find.busy .find-label { display: none; }
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
 
 .search-clear {
   position: absolute;
@@ -1055,9 +1088,12 @@ input, textarea {
   #view-explorer > .search-results,
   #view-explorer > .notes-list,
   #view-editor > .editor-header,
+  #view-editor > .preview-banner,
   #view-editor > .editor-path-field,
   #view-editor > #editor-container,
   #view-editor > .editor-actions,
+  #view-editor > .status-text,
+  #view-explorer > .status-text,
   #view-explorer > .search-hint {
     max-width: 640px;
     width: 100%;
@@ -1171,8 +1207,24 @@ input, textarea {
 #editor-container .editor-preview .callout-quote,
 #editor-container .editor-preview .callout-cite    { border-left-color: #9e9e9e; }
 
-/* Code blocks in the preview (hljs theme background is overridden) */
+/* Code blocks in the preview (hljs theme background is overridden).
+   Long lines must wrap instead of scrolling inside the block: the hljs
+   github theme sets overflow-x:auto on .hljs, and <pre> defaults to
+   white-space:pre. <code> is forced to display:block — an inline <code>
+   with vertical padding paints its fragments over neighbouring wrapped
+   lines. Wrap combo mirrors CodeMirror's own: pre-wrap + overflow-wrap,
+   word-break stays normal. */
+#editor-container .editor-preview pre {
+  white-space: pre-wrap;
+  overflow-x: hidden;
+}
+#editor-container .editor-preview pre code,
 #editor-container .editor-preview pre code.hljs {
+  display: block;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: break-word;
+  line-height: 1.5;
   background: var(--tg-secondary);
   color: var(--tg-text);
   border-radius: 8px;

@@ -139,6 +139,7 @@ const els = {
   breadcrumbs: $('breadcrumbs'),
   searchInput: $('search-input'),
   searchClear: $('search-clear'),
+  searchFind: $('search-find'),
   searchResults: $('search-results'),
   notesList: $('notes-list'),
   explorerStatus: $('explorer-status'),
@@ -626,6 +627,17 @@ async function runSearch(query) {
     return;
   }
 
+  // Busy indicator on the "Find" button plus a placeholder in the popup.
+  els.searchFind.hidden = false;
+  els.searchFind.disabled = true;
+  els.searchFind.classList.add('busy');
+  els.searchModal.hidden = false;
+  els.searchModalResults.textContent = '';
+  const pending = document.createElement('div');
+  pending.className = 'status-text';
+  pending.textContent = STRINGS.searching;
+  els.searchModalResults.append(pending);
+
   try {
     const results = await api.searchNotes(query);
     if (seq !== state.searchSeq) return;
@@ -641,19 +653,46 @@ async function runSearch(query) {
     failed.className = 'status-text';
     failed.textContent = error instanceof api.ApiError ? error.message : STRINGS.loadFailed;
     els.searchModalResults.append(failed);
+  } finally {
+    if (seq === state.searchSeq) {
+      els.searchFind.disabled = false;
+      els.searchFind.classList.remove('busy');
+    }
   }
 }
 
-let searchTimer = null;
+// The search only runs on the "Find" button (or Enter) — not while typing,
+// so a slow typist never triggers half-finished queries.
 els.searchInput.addEventListener('input', () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => void runSearch(els.searchInput.value.trim()), 350);
+  const hasQuery = els.searchInput.value.trim() !== '';
+  els.searchFind.hidden = !hasQuery;
+  if (!hasQuery) {
+    state.searchSeq += 1; // invalidate any in-flight request
+    els.searchFind.disabled = false;
+    els.searchFind.classList.remove('busy');
+    hideSearchResults();
+  }
+});
+
+els.searchInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const query = els.searchInput.value.trim();
+    if (query !== '') void runSearch(query);
+  }
+});
+
+els.searchFind.addEventListener('click', () => {
+  const query = els.searchInput.value.trim();
+  if (query !== '') void runSearch(query);
 });
 
 function clearSearch() {
   els.searchInput.value = '';
   els.searchClear.hidden = true;
-  clearTimeout(searchTimer);
+  els.searchFind.hidden = true;
+  els.searchFind.disabled = false;
+  els.searchFind.classList.remove('busy');
   hideSearchResults();
   els.searchInput.focus();
 }
@@ -1157,6 +1196,7 @@ document.addEventListener('tag-click', async (event) => {
   mainButton.hide();
   showView('explorer');
   els.searchInput.value = `#${tag}`;
+  els.searchFind.hidden = false;
   await runSearch(`#${tag}`);
 });
 
