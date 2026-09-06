@@ -39,6 +39,7 @@ public class RepositoryEndpointsTests
         dbContext.Database.EnsureCreated();
         PendingSyncService.EnsureTableCreated(dbContext);
         Gitenberg.Web.Features.Reminders.ReminderService.EnsureTableCreated(dbContext);
+        Gitenberg.Web.Features.Pins.PinsService.EnsureTableCreated(dbContext);
         dbContext.EnsureFtsTableCreated();
         return dbContext;
     }

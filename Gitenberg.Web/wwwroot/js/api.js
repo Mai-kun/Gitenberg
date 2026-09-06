@@ -180,6 +180,19 @@ export function searchNotes(query) {
   return request('GET', '/api/notes/search', { params: { query } });
 }
 
+// Pins (per active repository; the server normalizes the path).
+export function listPins() {
+  return request('GET', '/api/pins');
+}
+
+export function pinItem(path) {
+  return request('PUT', '/api/pins', { body: { path } });
+}
+
+export function unpinItem(path) {
+  return request('DELETE', '/api/pins', { params: { path } });
+}
+
 export function syncStatus() {
   return request('GET', '/api/sync/status');
 }

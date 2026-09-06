@@ -17,6 +17,7 @@ const FOLDER_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4
 const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>';
 const TRASH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
 const KEBAB_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+const PIN_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
 
 // ---------------------------------------------------------------------------
 // Telegram helpers
@@ -157,6 +158,8 @@ const els = {
   infoGithubLink: $('info-github-link'),
   infoHistory: $('info-history'),
   infoMove: $('info-move'),
+  infoPin: $('info-pin'),
+  infoPinLabel: $('info-pin-label'),
   infoClose: $('info-close'),
   infoBackdrop: $('info-backdrop'),
   historyModal: $('history-modal'),
@@ -249,6 +252,7 @@ const state = {
   heatmapOk: false, // heatmap data loaded successfully at least once
   repositories: [], // user's repositories (GET /api/repositories)
   repoFormRepoId: null, // repository bound to the settings form; null = new one
+  pinnedPaths: null, // Set of pinned paths of the active repository; null = not loaded yet
 };
 
 // Unique #tags in a markdown text (headings excluded by construction: their #
@@ -464,7 +468,7 @@ function setStatus(message) {
   els.explorerStatus.hidden = !message;
 }
 
-function renderNotes(items) {
+function renderNotes(items, pinnedPaths = new Set()) {
   els.notesList.textContent = '';
 
   if (!items.length) {
@@ -474,8 +478,13 @@ function renderNotes(items) {
   setStatus('');
 
   const isDirectory = (item) => (item?.type || '').toLowerCase() === 'dir';
+  const isPinned = (item) => pinnedPaths.has(normPath(item.path));
 
+  // Pinned folders, pinned files, regular folders, regular files.
   const sorted = [...items].sort((a, b) => {
+    const aPin = isPinned(a) ? 0 : 1;
+    const bPin = isPinned(b) ? 0 : 1;
+    if (aPin !== bPin) return aPin - bPin;
     const aDir = isDirectory(a) ? 0 : 1;
     const bDir = isDirectory(b) ? 0 : 1;
     if (aDir !== bDir) return aDir - bDir;
@@ -485,10 +494,11 @@ function renderNotes(items) {
   for (const item of sorted) {
     const isDir = isDirectory(item);
     const isMd = /\.md$/i.test(String(item.name));
+    const pinned = isPinned(item);
 
     const row = document.createElement('button');
     row.type = 'button';
-    row.className = `note-row ${isDir ? 'is-dir' : 'is-file'}`;
+    row.className = `note-row ${isDir ? 'is-dir' : 'is-file'}${pinned ? ' is-pinned' : ''}`;
     row.dataset.path = item.path;
 
     const icon = document.createElement('span');
@@ -502,6 +512,13 @@ function renderNotes(items) {
     const name = document.createElement('span');
     name.className = 'note-name';
     name.textContent = item.name;
+    if (pinned) {
+      const pin = document.createElement('span');
+      pin.className = 'note-pin';
+      pin.innerHTML = PIN_ICON;
+      pin.setAttribute('aria-label', '📌');
+      name.prepend(pin);
+    }
     const meta = document.createElement('span');
     meta.className = 'note-meta';
     meta.textContent = isDir ? 'Папка' : formatSize(item.size);
@@ -592,9 +609,12 @@ async function loadFolder(path) {
   updateBackButton();
 
   try {
-    const items = await api.listNotes(path || undefined);
+    const [items, pinnedPaths] = await Promise.all([
+      api.listNotes(path || undefined),
+      getPinnedPaths(),
+    ]);
     if (state.currentPath !== path) return; // user navigated away meanwhile
-    renderNotes(Array.isArray(items) ? items : []);
+    renderNotes(Array.isArray(items) ? items : [], pinnedPaths);
   } catch (error) {
     if (state.currentPath !== path) return;
     if (error instanceof api.ApiError && error.status === 404 && /not found/i.test(error.message)) {
@@ -737,6 +757,29 @@ const taskQueues = new Map();
 function invalidateCaches() {
   invalidateVaultIndex();
   taskContentCache.clear();
+  invalidatePins();
+}
+
+// ---------------------------------------------------------------------------
+// Pins — "закрепить наверху" markers of the active repository. The backend
+// re-points pins on move/delete and drops them with the repository, so after
+// every mutation (which calls invalidateCaches()) a lazy re-read is enough.
+// ---------------------------------------------------------------------------
+
+function invalidatePins() {
+  state.pinnedPaths = null;
+}
+
+// Resolves the pinned-path Set; never rejects (a failed probe just retries on
+// the next listing render).
+function getPinnedPaths() {
+  if (state.pinnedPaths) return Promise.resolve(state.pinnedPaths);
+  return api.listPins()
+    .then((pins) => {
+      state.pinnedPaths = new Set((Array.isArray(pins) ? pins : []).map((p) => normPath(p.path)));
+      return state.pinnedPaths;
+    })
+    .catch(() => new Set());
 }
 
 // Mirrors the backend TaskListBuilder regex exactly (bullets, ordered lists,
@@ -1360,6 +1403,9 @@ function openInfoModal(item, isDir) {
   els.infoMove.hidden = false;
   // Version history is per-file: folders have no single content to restore.
   els.infoHistory.hidden = isDir;
+  // Pinning works for notes and folders alike.
+  els.infoPin.hidden = false;
+  els.infoPinLabel.textContent = state.pinnedPaths?.has(normPath(item.path)) ? STRINGS.unpinAction : STRINGS.pinAction;
 
   els.infoModal.hidden = false;
 }
@@ -1377,6 +1423,31 @@ document.addEventListener('keydown', (event) => {
   if (!els.historyModal.hidden) closeHistoryModal();
   else if (!els.infoModal.hidden) closeInfoModal();
 });
+
+// ---------------------------------------------------------------------------
+// Pin / unpin from the properties sheet: the item floats to the top of its
+// folder listing. The backend re-points pins on move and drops them on delete,
+// so a toggle only flips the flag and refreshes the listing.
+// ---------------------------------------------------------------------------
+
+els.infoPin.addEventListener('click', () => {
+  if (state.infoItem) void togglePin(state.infoItem);
+});
+
+async function togglePin(item) {
+  const path = normPath(item.path);
+  const isPinned = state.pinnedPaths?.has(path) ?? false;
+  try {
+    await (isPinned ? api.unpinItem(path) : api.pinItem(path));
+    invalidatePins();
+    haptic('success');
+    showToast(isPinned ? STRINGS.unpinnedToast : STRINGS.pinnedToast);
+    closeInfoModal();
+    await loadFolder(state.currentPath);
+  } catch (error) {
+    showErrorToast(error);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // History sheet: commit list for the note file with per-version preview and
@@ -2314,8 +2385,8 @@ async function bootstrap() {
   const deepLink = noteTargetFromStartParam();
 
   try {
-    const items = await api.listNotes();
-    renderNotes(Array.isArray(items) ? items : []);
+    const [items, pinnedPaths] = await Promise.all([api.listNotes(), getPinnedPaths()]);
+    renderNotes(Array.isArray(items) ? items : [], pinnedPaths);
     state.currentPath = '';
     renderBreadcrumbs('');
     updateBackButton();

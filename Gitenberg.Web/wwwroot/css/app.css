@@ -422,6 +422,15 @@ input, textarea {
   white-space: nowrap;
 }
 
+/* Pin badge inside .note-name: prepended before the name text. */
+.note-pin {
+  display: inline-flex;
+  flex-shrink: 0;
+  vertical-align: -2px;
+  margin-right: 5px;
+  color: var(--tg-button);
+}
+
 .note-meta {
   display: block;
   font-size: 12px;

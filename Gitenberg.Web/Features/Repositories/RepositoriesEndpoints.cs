@@ -256,6 +256,8 @@ public static class RepositoriesEndpoints
             $"DELETE FROM PendingNoteOps WHERE TelegramUserId = {uid} AND RepositoryId = {rid}");
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"DELETE FROM Reminders WHERE TelegramUserId = {uid} AND RepositoryId = {rid}");
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM PinnedItems WHERE TelegramUserId = {uid} AND RepositoryId = {rid}");
 
         dbContext.Repositories.Remove(repository);
         await dbContext.SaveChangesAsync();

@@ -1,6 +1,7 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Activity;
+using Gitenberg.Web.Features.Pins;
 using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Features.TelegramBot.Auth;
@@ -202,6 +203,7 @@ public static class NotesEndpoints
         IMemoryCache memoryCache,
         ReminderService reminderService,
         ActivityService activityService,
+        PinsService? pinsService = null,
         HttpContext? httpContext = null
     )
     {
@@ -237,6 +239,11 @@ public static class NotesEndpoints
         await pendingSync.EnqueueAsync(telegramId.Value, repository.RepositoryId, "delete", path);
         BustUserCache(memoryCache, telegramId.Value, repository.RepositoryId);
         await reminderService.RemoveForNoteAsync(telegramId.Value, repository.RepositoryId, path);
+        if (pinsService != null)
+        {
+            // Deleting a folder also unpins everything pinned below it.
+            await pinsService.RemoveForPathAsync(telegramId.Value, repository.RepositoryId, path);
+        }
         await activityService.RecordAsync(telegramId.Value, timezoneOffset);
 
         return Results.Ok(new { Message = $"Note at '{path}' deleted locally; it will be synced to GitHub.", Pending = true });
@@ -253,6 +260,7 @@ public static class NotesEndpoints
         IMemoryCache memoryCache,
         ReminderService reminderService,
         ActivityService activityService,
+        PinsService? pinsService = null,
         HttpContext? httpContext = null
     )
     {
@@ -297,6 +305,12 @@ public static class NotesEndpoints
         await pendingSync.EnqueueAsync(telegramId.Value, repository.RepositoryId, "move", request.FromPath, request.ToPath, request.Content);
         BustUserCache(memoryCache, telegramId.Value, repository.RepositoryId);
         await SyncRemindersOnMoveAsync(reminderService, telegramId.Value, repository.RepositoryId, request);
+        if (pinsService != null)
+        {
+            // Pins are path metadata independent of content: the moved item and
+            // everything pinned below it follow the new path either way.
+            await pinsService.ReassignOnMoveAsync(telegramId.Value, repository.RepositoryId, request.FromPath, request.ToPath);
+        }
         await activityService.RecordAsync(telegramId.Value, timezoneOffset);
 
         return Results.Ok(new { Message = $"Move of '{request.FromPath}' to '{request.ToPath}' queued; it will be synced to GitHub.", Pending = true });

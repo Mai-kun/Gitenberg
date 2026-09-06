@@ -2,6 +2,7 @@ using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Activity;
 using Gitenberg.Web.Features.Export;
 using Gitenberg.Web.Features.Notes;
+using Gitenberg.Web.Features.Pins;
 using Gitenberg.Web.Features.Registration;
 using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Repositories;
@@ -66,6 +67,7 @@ builder.Services.AddScoped<UpdateHandler>();
 builder.Services.AddScoped<InlineSearchHandler>();
 builder.Services.AddScoped<ReminderService>();
 builder.Services.AddScoped<ActivityService>();
+builder.Services.AddScoped<PinsService>();
 builder.Services.AddSingleton<InlineFileLinkService>();
 builder.Services.AddSingleton<ITelegramAuthValidator>(_ => new TelegramAuthValidator(botConfig.BotToken));
 
@@ -97,6 +99,7 @@ using (var scope = app.Services.CreateScope())
     PendingSyncService.EnsureTableCreated(db);
     ReminderService.EnsureTableCreated(db);
     ActivityService.EnsureTableCreated(db);
+    PinsService.EnsureTableCreated(db);
     // Requires the FTS, PendingNoteOps and Reminders tables to exist already.
     db.EnsureRepositoriesTableCreated();
 }
@@ -124,6 +127,7 @@ app.MapSyncEndpoints();
 app.MapExportEndpoints();
 app.MapActivityEndpoints();
 app.MapTasksEndpoints();
+app.MapPinsEndpoints();
 
 app.UseHttpsRedirection();
 app.UseSerilogRequestLogging();
