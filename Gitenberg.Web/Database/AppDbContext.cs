@@ -138,14 +138,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             // Identifier is a compile-time constant: inline it (a hole would
             // become a bound parameter, and ALTER TABLE @p0 is invalid).
+#pragma warning disable EF1003 // identifier from a compile-time constant, cannot be a parameter
             Database.ExecuteSqlRaw("ALTER TABLE " + tableName + " ADD COLUMN RepositoryId TEXT NULL;");
+#pragma warning restore EF1003
         }
 
+#pragma warning disable EF1003 // identifier from a compile-time constant, cannot be a parameter
         Database.ExecuteSqlRaw(
             "UPDATE " + tableName + " " +
             "SET RepositoryId = (" +
             "SELECT r.Id FROM Repositories r WHERE r.TelegramUserId = CAST(" + tableName + ".TelegramUserId AS INTEGER)) " +
             "WHERE RepositoryId IS NULL;");
+#pragma warning restore EF1003
     }
 
     // SQLite cannot change a primary key in place: rebuild the table with the
@@ -220,9 +224,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         // is safe here; identifiers cannot be bound as SQL parameters. Note:
         // SqlQuery (not Raw) would turn the hole into @p0 — and '@p0' in quotes
         // is a literal, so pragma_table_info would return nothing.
+#pragma warning disable EF1003 // identifier from a compile-time constant, cannot be a parameter
         var rows = Database.SqlQueryRaw<string>(
             "SELECT name AS Value FROM pragma_table_info('" + tableName + "')"
         ).ToList();
+#pragma warning restore EF1003
         foreach (var name in rows)
         {
             columns.Add(name);
@@ -245,7 +251,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
 
         // Identifiers must be inlined: an interpolated hole would become a
         // bound parameter, and ALTER TABLE @p0 is a syntax error.
+#pragma warning disable EF1003 // identifiers from compile-time constants, cannot be parameters
         Database.ExecuteSqlRaw(
             "ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnDefinition + ";");
+#pragma warning restore EF1003
     }
 }

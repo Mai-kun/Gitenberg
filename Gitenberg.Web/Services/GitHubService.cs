@@ -185,17 +185,19 @@ public class GitHubService : IGitHubService
         // treated as a folder and deleted recursively.
         var first = contents.FirstOrDefault();
         var normalizedPath = path.Trim('/');
-        var isFile = first != null
+        var file = first != null
             && first.Type == ContentType.File
-            && string.Equals(first.Path?.Trim('/'), normalizedPath, StringComparison.OrdinalIgnoreCase);
+            && string.Equals(first.Path?.Trim('/'), normalizedPath, StringComparison.OrdinalIgnoreCase)
+                ? first
+                : null;
 
-        if (isFile)
+        if (file != null)
         {
             await client.Repository.Content.DeleteFile(
                 context.Owner,
                 context.Repo,
-                first.Path,
-                new DeleteFileRequest(commitMessage, first.Sha)
+                file.Path,
+                new DeleteFileRequest(commitMessage, file.Sha)
             );
             return;
         }
@@ -256,17 +258,19 @@ public class GitHubService : IGitHubService
 
         var contents = await client.Repository.Content.GetAllContents(context.Owner, context.Repo, normalizedFrom);
         var first = contents.Count > 0 ? contents[0] : null;
-        var isFile = first != null
+        var file = first != null
             && first.Type == ContentType.File
-            && string.Equals(first.Path?.Trim('/'), normalizedFrom, StringComparison.OrdinalIgnoreCase);
+            && string.Equals(first.Path?.Trim('/'), normalizedFrom, StringComparison.OrdinalIgnoreCase)
+                ? first
+                : null;
 
         // A caller-supplied content only makes sense for single files.
-        if (!isFile && content != null)
+        if (file is null && content != null)
         {
             throw new ArgumentException($"Path '{fromPath}' is a directory, not a movable file.");
         }
 
-        if (!isFile)
+        if (file is null)
         {
             await MoveFolderRecursiveAsync(client, context, normalizedFrom, normalizedTo, commitMessage);
             return;
@@ -277,10 +281,10 @@ public class GitHubService : IGitHubService
         if (content is null)
         {
             // Content is omitted for files > 1 MB — fall back to the blob API.
-            content = first.Content;
+            content = file.Content;
             if (string.IsNullOrEmpty(content))
             {
-                var blob = await client.Git.Blob.Get(context.Owner, context.Repo, first.Sha);
+                var blob = await client.Git.Blob.Get(context.Owner, context.Repo, file.Sha);
                 content = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(blob.Content));
             }
         }

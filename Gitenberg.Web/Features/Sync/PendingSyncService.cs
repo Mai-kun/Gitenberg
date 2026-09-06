@@ -203,9 +203,10 @@ public class PendingSyncService(AppDbContext dbContext)
     /// <summary>
     /// Applies pending changes to a directory listing. Also rewrites the
     /// requested path when it only exists locally under a pending move.
-    /// Returns the effective GitHub path that should be listed.
+    /// Returns the effective GitHub path that should be listed
+    /// (null for the repository root).
     /// </summary>
-    public async Task<(string effectivePath, IReadOnlyList<RepositoryContent> items)> ApplyListOverlayAsync(
+    public async Task<(string? effectivePath, IReadOnlyList<RepositoryContent> items)> ApplyListOverlayAsync(
         long telegramId, int repositoryId, string? path, Func<string?, Task<IReadOnlyList<RepositoryContent>>> fetch)
     {
         var ops = await GetOpsAsync(telegramId, repositoryId);

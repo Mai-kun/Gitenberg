@@ -331,9 +331,8 @@ public class RepositoryEndpointsTests
         db.IndexedNotes.Add(new IndexedNote { TelegramUserId = user.TelegramId, RepositoryId = first.Id, NotePath = "inbox/a.md", Sha = "s1" });
         db.IndexedNotes.Add(new IndexedNote { TelegramUserId = user.TelegramId, RepositoryId = second.Id, NotePath = "inbox/a.md", Sha = "s2" });
         await db.SaveChangesAsync();
-        db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO NoteSearchFts (TelegramUserId, RepositoryId, NotePath, Content) VALUES ({user.TelegramId.ToString()}, {first.Id.ToString()}, 'inbox/a.md', 'inbox/a.md\ncontent')"
-        ).GetAwaiter().GetResult();
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO NoteSearchFts (TelegramUserId, RepositoryId, NotePath, Content) VALUES ({user.TelegramId.ToString()}, {first.Id.ToString()}, 'inbox/a.md', 'inbox/a.md\ncontent')");
         var pendingSync = new PendingSyncService(db);
         await pendingSync.EnqueueAsync(user.TelegramId, first.Id, "save", "inbox/a.md", null, "local draft");
         await new Gitenberg.Web.Features.Reminders.ReminderService(db)
