@@ -23,6 +23,17 @@ services:
       - seq
     restart: unless-stopped
 
+  # Cloudflare Tunnel (remote-managed): создайте туннель в Zero Trust dashboard,
+  # скопируйте токен в CLOUDFLARE_TUNNEL_TOKEN (.env), а публичный hostname
+  # в дашборде укажите на http://gitenberg-web:8080.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: gitenberg-cloudflared
+    command: tunnel --protocol http2 --url http://gitenberg-web:8080
+    depends_on:
+      - gitenberg-web
+    restart: unless-stopped
+
   seq:
     image: datalust/seq:latest
     container_name: gitenberg-seq
