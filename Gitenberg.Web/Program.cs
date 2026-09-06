@@ -21,7 +21,7 @@ using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Bootstrap logger: enough to report startup failures before configuration is fully loaded.
+
 Log.Logger = new LoggerConfiguration()
         .ReadFrom.Configuration(builder.Configuration)
         .CreateBootstrapLogger();
@@ -69,7 +69,10 @@ builder.Services.AddScoped<ReminderService>();
 builder.Services.AddScoped<ActivityService>();
 builder.Services.AddScoped<PinsService>();
 builder.Services.AddSingleton<InlineFileLinkService>();
-builder.Services.AddSingleton<ITelegramAuthValidator>(_ => new TelegramAuthValidator(botConfig.BotToken));
+builder.Services.AddSingleton<ITelegramAuthValidator>(sp =>
+    new TelegramAuthValidator(
+        botConfig.BotToken,
+        sp.GetRequiredService<ILogger<TelegramAuthValidator>>()));
 
 var searchConfig = builder.Configuration
                            .GetSection(SearchConfiguration.SectionName)

@@ -13,7 +13,8 @@ public class TelegramAuthFilterTests
 {
     private const string TestBotToken = "123456:TEST-TOKEN";
 
-    private readonly TelegramAuthValidator _validator = new(TestBotToken);
+    private readonly TelegramAuthValidator _validator = new(
+        TestBotToken, NullLogger<TelegramAuthValidator>.Instance);
 
     private static string BuildValidInitData(long userId = 12345)
     {
@@ -53,7 +54,7 @@ public class TelegramAuthFilterTests
 
         var environment = new FakeWebHostEnvironment { EnvironmentName = environmentName };
         var filter = new TelegramAuthFilter(
-            new TelegramAuthValidator(TestBotToken),
+            new TelegramAuthValidator(TestBotToken, NullLogger<TelegramAuthValidator>.Instance),
             environment,
             NullLogger<TelegramAuthFilter>.Instance);
 
@@ -86,6 +87,15 @@ public class TelegramAuthFilterTests
         httpContext.Items[TelegramAuthFilter.ItemsKey].Should().Be(777L);
     }
 
+    // Results.Json wraps the payload in Json<TValue>; reading the value via
+    // reflection avoids wiring up the JSON response DI services the Execute
+    // path would need.
+    private static string ExtractErrorValue(object? filterResult)
+    {
+        var value = filterResult!.GetType().GetProperty("Value")?.GetValue(filterResult);
+        return (string?)value?.GetType().GetProperty("Error")?.GetValue(value) ?? string.Empty;
+    }
+
     [Fact]
     public async Task InvokeAsync_WithTamperedInitData_ReturnsUnauthorizedAndDoesNotInvokeNext()
     {
@@ -99,6 +109,10 @@ public class TelegramAuthFilterTests
         statusCodeResult.Should().NotBeNull();
         statusCodeResult!.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
         httpContext.Items.ContainsKey(TelegramAuthFilter.ItemsKey).Should().BeFalse();
+
+        // The 401 carries a descriptive body so the client can show a
+        // meaningful message instead of a bare "HTTP 401:".
+        ExtractErrorValue(filterResult).Should().StartWith("Telegram authorization failed:");
     }
 
     [Fact]
@@ -130,7 +144,17 @@ public class TelegramAuthFilterTests
             var statusCodeResult = filterResult as IStatusCodeHttpResult;
             statusCodeResult.Should().NotBeNull();
             statusCodeResult!.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+
+            ExtractErrorValue(filterResult).Should().Contain("Authorization header is missing");
         }
+    }
+
+    // Results.Json serializes with Web defaults (camelCase); older payloads in
+    // this app use PascalCase, so accept either key name.
+    private static string GetErrorProperty(JsonElement root)
+    {
+        if (root.TryGetProperty("error", out var camel)) return camel.GetString()!;
+        return root.GetProperty("Error").GetString()!;
     }
 
     private sealed class FakeWebHostEnvironment : IWebHostEnvironment

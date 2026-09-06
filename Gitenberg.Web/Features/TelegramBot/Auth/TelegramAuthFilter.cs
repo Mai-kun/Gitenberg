@@ -34,7 +34,11 @@ public sealed class TelegramAuthFilter(
                 return await next(context);
             }
 
-            return Results.Unauthorized();
+            // A body here (instead of a bare 401) lets the Mini App show a
+            // meaningful message instead of a cryptic "HTTP 401:".
+            return Results.Json(
+                new { Error = "Telegram authorization failed: the Authorization header is missing. Open the Mini App from Telegram." },
+                statusCode: StatusCodes.Status401Unauthorized);
         }
 
         var initData = ExtractInitData(authorizationHeader);
@@ -42,7 +46,11 @@ public sealed class TelegramAuthFilter(
         if (!result.IsValid || result.User is null)
         {
             logger.LogWarning("Telegram initData validation failed: {Error}", result.Error);
-            return Results.Unauthorized();
+            // The validator's reason (e.g. hash mismatch) points the operator
+            // straight at the usual cause: a wrong or placeholder bot token.
+            return Results.Json(
+                new { Error = $"Telegram authorization failed: {result.Error}" },
+                statusCode: StatusCodes.Status401Unauthorized);
         }
 
         httpContext.Items[ItemsKey] = result.User.Id;

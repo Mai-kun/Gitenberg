@@ -154,6 +154,52 @@ input, textarea {
   border-color: var(--tg-button);
 }
 
+/* Label row with a "?" hint button and its tap-to-toggle popover */
+.label-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.label-row label { margin-bottom: 0; }
+
+.hint-btn {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1px solid var(--tg-hint);
+  border-radius: 50%;
+  color: var(--tg-hint);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.hint-btn:active { transform: scale(0.9); }
+
+.hint-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  padding: 10px 12px;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--tg-secondary);
+  color: var(--tg-text);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
 .error-text {
   color: var(--tg-destructive);
   font-size: 14px;

@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using FluentAssertions;
 using Gitenberg.Web.Features.TelegramBot.Auth;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Gitenberg.Tests.Features.TelegramBot;
@@ -11,7 +13,8 @@ public class TelegramAuthValidatorTests
 {
     private const string TestBotToken = "123456:TEST-TOKEN";
 
-    private readonly TelegramAuthValidator _validator = new(TestBotToken);
+    private readonly TelegramAuthValidator _validator = new(
+        TestBotToken, NullLogger<TelegramAuthValidator>.Instance);
 
     /// <summary>
     /// Builds signed initData exactly the way Telegram signs it: URL-encode all values,
@@ -26,10 +29,11 @@ public class TelegramAuthValidatorTests
         DateTimeOffset? authDate = null,
         string? hashOverride = null,
         bool includeSignature = false,
-        string? botToken = TestBotToken)
+        string? botToken = TestBotToken,
+        JsonSerializerOptions? jsonOptions = null)
     {
         var actualAuthDate = authDate ?? DateTimeOffset.UtcNow;
-        var userJson = JsonSerializer.Serialize(new TelegramUser(userId, firstName, lastName, username));
+        var userJson = JsonSerializer.Serialize(new TelegramUser(userId, firstName, lastName, username), jsonOptions);
 
         var pairs = new List<KeyValuePair<string, string>>
         {
@@ -216,6 +220,57 @@ public class TelegramAuthValidatorTests
 
         result.IsValid.Should().BeFalse();
         result.User.Should().BeNull();
+    }
+
+    // Telegram encodes spaces in form-urlencoded values as '+' (e.g. "Дима Иванов"
+    // -> "Дима+Иванов"), while Uri.UnescapeDataString leaves '+' untouched. The
+    // data-check-string must contain the decoded space, otherwise the hash
+    // diverges from what Telegram signed.
+    [Theory]
+    [InlineData("Дима Иванов")]
+    [InlineData("Vladislav Kibenko")]
+    public void Validate_WithPlusEncodedSpace_DecodesSpaceBeforeHashing(string firstName)
+    {
+        // Percent-encode everything, then re-encode only the spaces the way
+        // Telegram does — the signature stays computed over the decoded values.
+        var initData = BuildInitData(firstName: firstName).Replace("%20", "+");
+
+        var result = _validator.Validate(initData);
+
+        result.IsValid.Should().BeTrue();
+        result.User!.FirstName.Should().Be(firstName);
+    }
+
+    // The inverse case: a literal '+' inside a value arrives percent-encoded as
+    // '%2B' and must decode back to '+', not to a space.
+    [Fact]
+    public void Validate_WithEncodedLiteralPlus_DecodesBackToPlus()
+    {
+        var initData = BuildInitData(
+            firstName: "C++ dev",
+            jsonOptions: new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+
+        var result = _validator.Validate(initData);
+
+        result.IsValid.Should().BeTrue();
+        result.User!.FirstName.Should().Be("C++ dev");
+    }
+
+    // Tokens copied on Windows can carry a trailing '\r' (0x0D); that byte would
+    // silently poison the HMAC key and no signature would ever match.
+    [Theory]
+    [InlineData(" 123456:TEST-TOKEN")]
+    [InlineData("123456:TEST-TOKEN ")]
+    [InlineData("123456:TEST-TOKEN\r")]
+    [InlineData("\r\n123456:TEST-TOKEN\r\n")]
+    public void Validate_WithDirtyBotToken_TrimsBeforeHashing(string dirtyToken)
+    {
+        var validator = new TelegramAuthValidator(dirtyToken, NullLogger<TelegramAuthValidator>.Instance);
+        var initData = BuildInitData(botToken: TestBotToken);
+
+        var result = validator.Validate(initData);
+
+        result.IsValid.Should().BeTrue();
     }
 
     private static string ReplaceValue(string initData, string key, string newValue)

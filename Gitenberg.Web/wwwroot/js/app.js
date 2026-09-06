@@ -407,11 +407,38 @@ els.registerForm.addEventListener('submit', async (event) => {
     haptic('success');
     await enterExplorer('');
   } catch (error) {
-    setError(els.registerError, error instanceof api.ApiError ? error.message : STRINGS.registerFailed);
+    if (error instanceof api.ApiError && error.status === 401) {
+      setError(els.registerError, STRINGS.authFailed);
+    } else {
+      setError(els.registerError, error instanceof api.ApiError ? error.message : STRINGS.registerFailed);
+    }
     haptic('error');
   } finally {
     setButtonBusy(els.registerSubmit, false, STRINGS.registerBtnBusy, STRINGS.registerBtnIdle);
   }
+});
+
+// ---------------------------------------------------------------------------
+// "?" field hints: a tap toggles the popover next to the button; a tap
+// anywhere else (including the popover text itself) closes any open popover
+// (only one stays visible at a time).
+// ---------------------------------------------------------------------------
+
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('.hint-btn');
+  const tappedPopover = event.target.closest('.hint-popover');
+  if (!btn && tappedPopover) {
+    // The open popover can overlap the fields below — tapping it dismisses it.
+    tappedPopover.hidden = true;
+    return;
+  }
+  document.querySelectorAll('.hint-popover').forEach((popover) => {
+    if (btn && popover === btn.nextElementSibling) return;
+    popover.hidden = true;
+  });
+  if (!btn) return;
+  const popover = btn.nextElementSibling;
+  if (popover) popover.hidden = !popover.hidden;
 });
 
 // ---------------------------------------------------------------------------
@@ -2408,10 +2435,15 @@ async function bootstrap() {
       }
     }
   } catch (error) {
-    if (error instanceof api.ApiError && error.status === 404) {
-      // User not registered yet → registration screen.
+    if (error instanceof api.ApiError && (error.status === 404 || error.status === 401)) {
+      // 404 — the user is not registered yet; 401 — the startup probe could not
+      // be authenticated (no initData / signature check failed). Both mean "we
+      // cannot show the vault yet", so land on a clean registration form
+      // instead of painting a raw error on it. If auth is genuinely broken,
+      // the submit itself will surface a descriptive error.
       state.currentPath = '';
       showView('register');
+      setError(els.registerError, '');
       backButton.hide();
       return;
     }

@@ -50,11 +50,19 @@
           <input id="reg-repo" type="text" autocomplete="off" placeholder="my-notes" required>
         </div>
         <div class="field">
-          <label for="reg-inbox-path" data-i18n="inboxPathLabel">Папка для заметок</label>
+          <div class="label-row">
+            <label for="reg-inbox-path" data-i18n="inboxPathLabel">Папка для заметок</label>
+            <button type="button" class="hint-btn" data-i18n-title="hintToggle" aria-label="Что это?" title="Что это?">?</button>
+            <div class="hint-popover" role="tooltip" data-i18n="inboxPathHint" hidden>Папка в репозитории, куда сохраняются новые заметки — из бота и мини-приложения, например inbox. Если папки нет, она будет создана автоматически.</div>
+          </div>
           <input id="reg-inbox-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="inboxPathPlaceholder" placeholder="inbox">
         </div>
         <div class="field">
-          <label for="reg-attachments-path" data-i18n="attachmentsPathLabel">Папка для фото</label>
+          <div class="label-row">
+            <label for="reg-attachments-path" data-i18n="attachmentsPathLabel">Папка для фото</label>
+            <button type="button" class="hint-btn" data-i18n-title="hintToggle" aria-label="Что это?" title="Что это?">?</button>
+            <div class="hint-popover" role="tooltip" data-i18n="attachmentsPathHint" hidden>Папка в репозитории для фото и файлов, которые вы отправляете боту, например inbox/attachments.</div>
+          </div>
           <input id="reg-attachments-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="attachmentsPathPlaceholder" placeholder="inbox/attachments">
         </div>
 
@@ -234,11 +242,19 @@
         <input id="settings-token" type="password" autocomplete="off" data-i18n-placeholder="settingsTokenHint" placeholder="Оставьте пустым, чтобы сохранить текущий">
       </div>
       <div class="field">
-        <label for="settings-inbox-path" data-i18n="inboxPathLabel">Папка для заметок</label>
+        <div class="label-row">
+          <label for="settings-inbox-path" data-i18n="inboxPathLabel">Папка для заметок</label>
+          <button type="button" class="hint-btn" data-i18n-title="hintToggle" aria-label="Что это?" title="Что это?">?</button>
+          <div class="hint-popover" role="tooltip" data-i18n="inboxPathHint" hidden>Папка в репозитории, куда сохраняются новые заметки — из бота и мини-приложения, например inbox. Если папки нет, она будет создана автоматически.</div>
+        </div>
         <input id="settings-inbox-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="inboxPathPlaceholder" placeholder="inbox">
       </div>
       <div class="field">
-        <label for="settings-attachments-path" data-i18n="attachmentsPathLabel">Папка для фото</label>
+        <div class="label-row">
+          <label for="settings-attachments-path" data-i18n="attachmentsPathLabel">Папка для фото</label>
+          <button type="button" class="hint-btn" data-i18n-title="hintToggle" aria-label="Что это?" title="Что это?">?</button>
+          <div class="hint-popover" role="tooltip" data-i18n="attachmentsPathHint" hidden>Папка в репозитории для фото и файлов, которые вы отправляете боту, например inbox/attachments.</div>
+        </div>
         <input id="settings-attachments-path" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="attachmentsPathPlaceholder" placeholder="inbox/attachments">
       </div>
       <div id="repo-form-actions" class="repo-form-actions" hidden>
