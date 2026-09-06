@@ -67,11 +67,7 @@ public static class SearchEndpoints
             Console.Error.WriteLine($"Search index refresh failed for user {telegramId}: {ex.Message}");
         }
 
-        // Build a safe FTS5 MATCH expression: each whitespace-separated term
-        // becomes a quoted prefix term ("term"*). This avoids syntax errors
-        // from user input (quotes, #tags, punctuation) and enables partial
-        // matches for titles and tags.
-        var matchExpression = BuildMatchExpression(query);
+        var matchExpression = FtsQueryBuilder.Build(query);
         if (string.IsNullOrEmpty(matchExpression))
         {
             return Results.Ok(new List<NoteSearchResult>());
@@ -100,18 +96,6 @@ public static class SearchEndpoints
         }
 
         return Results.Ok(results);
-    }
-
-    private static string BuildMatchExpression(string rawQuery)
-    {
-        var terms = rawQuery
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(term => term.Replace("\"", string.Empty).Trim())
-            .Where(term => term.Length > 0)
-            .Select(term => $"\"{term}\"*")
-            .Take(8)
-            .ToList();
-        return string.Join(' ', terms);
     }
 }
 

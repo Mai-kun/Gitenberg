@@ -18,6 +18,8 @@ public class FakeTelegramBotClient : ITelegramBotClient
 {
     public List<(long ChatId, string Text, string? ButtonText)> SentMessages { get; } = new();
 
+    public List<AnswerInlineQueryRequest> AnsweredInlineQueries { get; } = new();
+
     // Served as the response to GetFileRequest (photo metadata).
     public TGFile FileToReturn { get; set; } = new() { FileId = "file-id", FilePath = "photos/photo.jpg" };
 
@@ -46,6 +48,12 @@ public class FakeTelegramBotClient : ITelegramBotClient
         if (request is GetFileRequest)
         {
             return Task.FromResult((TResponse)(object)FileToReturn);
+        }
+
+        if (request is AnswerInlineQueryRequest answerInlineQuery)
+        {
+            AnsweredInlineQueries.Add(answerInlineQuery);
+            return Task.FromResult((TResponse)(object)true);
         }
 
         throw new NotSupportedException($"Request type {request.GetType().Name} is not supported by the fake.");

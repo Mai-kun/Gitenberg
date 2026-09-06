@@ -56,6 +56,8 @@ if (!string.IsNullOrWhiteSpace(botConfig.BotToken))
     builder.Services.AddHostedService<ConfigureWebhook>();
 }
 builder.Services.AddScoped<UpdateHandler>();
+builder.Services.AddScoped<InlineSearchHandler>();
+builder.Services.AddSingleton<InlineFileLinkService>();
 builder.Services.AddSingleton<ITelegramAuthValidator>(_ => new TelegramAuthValidator(botConfig.BotToken));
 
 var searchConfig = builder.Configuration

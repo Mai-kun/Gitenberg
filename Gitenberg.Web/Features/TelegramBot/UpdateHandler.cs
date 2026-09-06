@@ -15,10 +15,17 @@ public class UpdateHandler(
     BotConfiguration botConfig,
     IGitHubService gitHubService,
     ITokenEncryptionService tokenEncryptionService,
+    InlineSearchHandler inlineSearchHandler,
     ILogger<UpdateHandler> logger)
 {
     public async Task HandleUpdateAsync(Update update, CancellationToken cancellationToken)
     {
+        if (update is { Type: UpdateType.InlineQuery, InlineQuery: { } inlineQuery })
+        {
+            await inlineSearchHandler.HandleInlineQueryAsync(inlineQuery, cancellationToken);
+            return;
+        }
+
         if (update is not { Type: UpdateType.Message, Message: { } message })
         {
             return;

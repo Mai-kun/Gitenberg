@@ -7,6 +7,7 @@ using FluentAssertions;
 using Gitenberg.Tests.Infrastructure.FakeClasses;
 using Gitenberg.Tests.Mocks;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services;
@@ -53,12 +54,21 @@ public class QuickCaptureTests
     )
     {
         var botConfig = new BotConfiguration { HostAddress = "https://example.com" };
+        var inlineSearchHandler = new InlineSearchHandler(
+            botClient,
+            dbContext,
+            botConfig,
+            new NoteIndexer(dbContext, gitHubService, _encryptionService, new FakeLogger<NoteIndexer>()),
+            new InlineFileLinkService(botConfig),
+            new FakeLogger<InlineSearchHandler>()
+        );
         return new UpdateHandler(
             botClient,
             dbContext,
             botConfig,
             gitHubService,
             _encryptionService,
+            inlineSearchHandler,
             new FakeLogger<UpdateHandler>()
         );
     }

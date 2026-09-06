@@ -29,7 +29,7 @@ public class ConfigureWebhook(
 
             await botClient.SetWebhook(
                     webhookAddress,
-                    allowedUpdates: [UpdateType.Message],
+                    allowedUpdates: [UpdateType.Message, UpdateType.InlineQuery],
                     secretToken: botConfig.SecretToken,
                     cancellationToken: cancellationToken
             );
