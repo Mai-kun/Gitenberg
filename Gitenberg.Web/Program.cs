@@ -7,6 +7,7 @@ using Gitenberg.Web.Features.Registration;
 using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Repositories;
 using Gitenberg.Web.Features.Search;
+using Gitenberg.Web.Features.Shares;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Features.Tasks;
 using Gitenberg.Web.Features.TelegramBot;
@@ -15,8 +16,10 @@ using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Threading.RateLimiting;
 using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -72,7 +75,8 @@ builder.Services.AddSingleton<InlineFileLinkService>();
 builder.Services.AddSingleton<ITelegramAuthValidator>(sp =>
     new TelegramAuthValidator(
         botConfig.BotToken,
-        sp.GetRequiredService<ILogger<TelegramAuthValidator>>()));
+        sp.GetRequiredService<ILogger<TelegramAuthValidator>>(),
+        sp.GetService<IHttpClientFactory>()));
 
 var searchConfig = builder.Configuration
                            .GetSection(SearchConfiguration.SectionName)
@@ -90,8 +94,31 @@ builder.Services.AddSingleton(syncConfig);
 builder.Services.AddScoped<PendingSyncService>();
 builder.Services.AddHostedService<SyncFlushService>();
 
+var shareConfig = builder.Configuration
+                         .GetSection(ShareConfiguration.SectionName)
+                         .Get<ShareConfiguration>()
+                 ?? new ShareConfiguration();
+builder.Services.AddSingleton(shareConfig);
+builder.Services.AddScoped<ShareLinksService>();
+
+// Public share endpoints are guarded only by the unguessable token, so the
+// rate limiter blunts brute-force sweeps over /api/share/{token}.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("share", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
+
 var app = builder.Build();
 app.UseExceptionHandler();
+app.UseRateLimiter();
 
 using (var scope = app.Services.CreateScope())
 {
@@ -103,6 +130,7 @@ using (var scope = app.Services.CreateScope())
     ReminderService.EnsureTableCreated(db);
     ActivityService.EnsureTableCreated(db);
     PinsService.EnsureTableCreated(db);
+    ShareLinksService.EnsureTableCreated(db);
     // Requires the FTS, PendingNoteOps and Reminders tables to exist already.
     db.EnsureRepositoriesTableCreated();
 }
@@ -131,6 +159,7 @@ app.MapExportEndpoints();
 app.MapActivityEndpoints();
 app.MapTasksEndpoints();
 app.MapPinsEndpoints();
+app.MapShareEndpoints();
 
 app.UseHttpsRedirection();
 app.UseSerilogRequestLogging();

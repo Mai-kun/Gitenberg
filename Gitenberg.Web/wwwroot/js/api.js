@@ -162,6 +162,20 @@ export function deleteNote(path, commitMessage) {
   });
 }
 
+// Public share links: create-or-get is idempotent — the same note keeps its
+// URL until the link is revoked.
+export function createShareLink(path) {
+  return request('POST', '/api/notes/share', { body: { path } });
+}
+
+export function getShareLink(path) {
+  return request('GET', '/api/notes/share', { params: { path } });
+}
+
+export function revokeShareLink(token) {
+  return request('DELETE', `/api/notes/share/${encodeURIComponent(token)}`);
+}
+
 // Version history: every edit is a commit, so history is the commit list of
 // the file; restoring queues a save op with the old content (a new commit).
 export function listNoteHistory(path) {

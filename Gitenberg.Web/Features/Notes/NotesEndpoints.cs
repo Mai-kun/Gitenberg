@@ -3,6 +3,7 @@ using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Activity;
 using Gitenberg.Web.Features.Pins;
 using Gitenberg.Web.Features.Reminders;
+using Gitenberg.Web.Features.Shares;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Models;
@@ -204,6 +205,7 @@ public static class NotesEndpoints
         ReminderService reminderService,
         ActivityService activityService,
         PinsService? pinsService = null,
+        ShareLinksService? shareLinksService = null,
         HttpContext? httpContext = null
     )
     {
@@ -244,6 +246,11 @@ public static class NotesEndpoints
             // Deleting a folder also unpins everything pinned below it.
             await pinsService.RemoveForPathAsync(telegramId.Value, repository.RepositoryId, path);
         }
+        if (shareLinksService != null)
+        {
+            // Deleted notes and folders lose their public share links.
+            await shareLinksService.RemoveForPathAsync(telegramId.Value, repository.RepositoryId, path);
+        }
         await activityService.RecordAsync(telegramId.Value, timezoneOffset);
 
         return Results.Ok(new { Message = $"Note at '{path}' deleted locally; it will be synced to GitHub.", Pending = true });
@@ -261,6 +268,7 @@ public static class NotesEndpoints
         ReminderService reminderService,
         ActivityService activityService,
         PinsService? pinsService = null,
+        ShareLinksService? shareLinksService = null,
         HttpContext? httpContext = null
     )
     {
@@ -310,6 +318,11 @@ public static class NotesEndpoints
             // Pins are path metadata independent of content: the moved item and
             // everything pinned below it follow the new path either way.
             await pinsService.ReassignOnMoveAsync(telegramId.Value, repository.RepositoryId, request.FromPath, request.ToPath);
+        }
+        if (shareLinksService != null)
+        {
+            // Share links follow the moved item too, so public URLs survive renames.
+            await shareLinksService.ReassignOnMoveAsync(telegramId.Value, repository.RepositoryId, request.FromPath, request.ToPath);
         }
         await activityService.RecordAsync(telegramId.Value, timezoneOffset);
 

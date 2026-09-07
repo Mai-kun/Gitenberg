@@ -40,6 +40,7 @@ public class RepositoryEndpointsTests
         PendingSyncService.EnsureTableCreated(dbContext);
         Gitenberg.Web.Features.Reminders.ReminderService.EnsureTableCreated(dbContext);
         Gitenberg.Web.Features.Pins.PinsService.EnsureTableCreated(dbContext);
+        Gitenberg.Web.Features.Shares.ShareLinksService.EnsureTableCreated(dbContext);
         dbContext.EnsureFtsTableCreated();
         return dbContext;
     }

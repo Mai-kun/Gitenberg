@@ -777,6 +777,18 @@ input, textarea {
 .info-sheet .btn { margin-bottom: 10px; }
 .info-sheet .btn:last-child { margin-bottom: 0; }
 
+/* Share sheet: the public link of a note */
+.share-link-input {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--tg-secondary);
+  font-size: 13px;
+  word-break: break-all;
+}
+
 /* History sheet: commit cards, expandable version preview */
 .history-path {
   font-size: 13px;

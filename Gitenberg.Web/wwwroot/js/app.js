@@ -147,6 +147,7 @@ const els = {
   editorTitle: $('editor-title'),
   btnEditorBack: $('btn-editor-back'),
   btnEditorDelete: $('btn-editor-delete'),
+  btnEditorShare: $('btn-editor-share'),
   editorStatus: $('editor-status'),
   notePath: $('note-path'),
   editorContainer: $('editor-container'),
@@ -162,6 +163,15 @@ const els = {
   infoPinLabel: $('info-pin-label'),
   infoClose: $('info-close'),
   infoBackdrop: $('info-backdrop'),
+  infoShare: $('info-share'),
+  shareModal: $('share-modal'),
+  shareLink: $('share-link'),
+  shareCopy: $('share-copy'),
+  shareRevoke: $('share-revoke'),
+  shareCreate: $('share-create'),
+  shareError: $('share-error'),
+  shareClose: $('share-close'),
+  shareBackdrop: $('share-backdrop'),
   historyModal: $('history-modal'),
   historyTitle: $('history-title'),
   historyPath: $('history-path'),
@@ -246,6 +256,8 @@ const state = {
   },
   historyPath: null, // note path shown in the history sheet
   historySeq: 0, // guards against out-of-order history responses
+  sharePath: null, // note path shown in the share sheet
+  shareToken: null, // active token of the share sheet (null after revoke)
   currentTab: 'notes', // 'notes' | 'tasks' (root-level tab switch)
   tasks: [], // aggregated checklist from GET /api/notes/tasks
   tasksFilter: 'active', // 'active' | 'all'
@@ -1249,6 +1261,8 @@ function openEditor(mode, path) {
     ? path.split('/').pop()
     : t('newNoteTitle');
   els.btnEditorDelete.hidden = mode !== 'edit';
+  // Sharing needs a saved note: a brand-new draft has nothing to share yet.
+  els.btnEditorShare.hidden = mode !== 'edit';
   els.notePath.value = mode === 'edit' ? path : suggestNewPath();
   setError(els.editorStatus, '');
 
@@ -1428,8 +1442,9 @@ function openInfoModal(item, isDir) {
 
   // Moving / renaming works for files and folders (folders move recursively).
   els.infoMove.hidden = false;
-  // Version history is per-file: folders have no single content to restore.
+  // Version history and public links are per-file: folders have neither.
   els.infoHistory.hidden = isDir;
+  els.infoShare.hidden = isDir;
   // Pinning works for notes and folders alike.
   els.infoPin.hidden = false;
   els.infoPinLabel.textContent = state.pinnedPaths?.has(normPath(item.path)) ? STRINGS.unpinAction : STRINGS.pinAction;
@@ -1446,8 +1461,10 @@ els.infoClose.addEventListener('click', closeInfoModal);
 els.infoBackdrop.addEventListener('click', closeInfoModal);
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  // The share sheet sits on top of the properties sheet — close it first.
+  if (!els.shareModal.hidden) closeShareModal();
   // History sits on top of the properties sheet — close it first.
-  if (!els.historyModal.hidden) closeHistoryModal();
+  else if (!els.historyModal.hidden) closeHistoryModal();
   else if (!els.infoModal.hidden) closeInfoModal();
 });
 
@@ -1475,6 +1492,117 @@ async function togglePin(item) {
     showErrorToast(error);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Share sheet: the public read-only link of a note. The backend create-or-get
+// is idempotent, so opening the sheet hands out the same URL until the link
+// is revoked; a revoked note gets a fresh token on "create new link".
+// ---------------------------------------------------------------------------
+
+els.infoShare.addEventListener('click', () => {
+  if (state.infoItem?.path) openShareModal(state.infoItem.path);
+});
+
+els.btnEditorShare.addEventListener('click', () => {
+  const path = state.editor.mode === 'edit'
+    ? (state.editor.path ?? els.notePath.value)
+    : els.notePath.value;
+  if (path) openShareModal(path);
+});
+
+function openShareModal(path) {
+  state.sharePath = normPath(path);
+  state.shareToken = null;
+  els.shareLink.value = '';
+  els.shareLink.hidden = true;
+  els.shareCopy.hidden = true;
+  els.shareRevoke.hidden = true;
+  els.shareCreate.hidden = true;
+  setError(els.shareError, '');
+  els.shareModal.hidden = false;
+  void loadShareLink();
+}
+
+function closeShareModal() {
+  els.shareModal.hidden = true;
+  state.sharePath = null;
+  state.shareToken = null;
+}
+
+els.shareClose.addEventListener('click', closeShareModal);
+els.shareBackdrop.addEventListener('click', closeShareModal);
+
+async function loadShareLink() {
+  try {
+    const data = await api.createShareLink(state.sharePath);
+    if (els.shareModal.hidden) return; // closed while the request was in flight
+    state.shareToken = data.token;
+    els.shareLink.value = data.url;
+    els.shareLink.hidden = false;
+    els.shareCopy.hidden = false;
+    els.shareRevoke.hidden = false;
+  } catch (error) {
+    if (els.shareModal.hidden) return;
+    setError(els.shareError, error?.message ?? STRINGS.shareFailed);
+  }
+}
+
+els.shareCopy.addEventListener('click', async () => {
+  const url = els.shareLink.value;
+  if (!url) return;
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(url);
+    copied = true;
+  } catch {
+    // The Clipboard API is unavailable outside secure contexts — fall back
+    // to the legacy hidden-textarea copy.
+    try {
+      const scratch = document.createElement('textarea');
+      scratch.value = url;
+      scratch.style.position = 'fixed';
+      scratch.style.opacity = '0';
+      document.body.append(scratch);
+      scratch.select();
+      copied = document.execCommand('copy');
+      scratch.remove();
+    } catch {
+      copied = false;
+    }
+  }
+  if (copied) {
+    haptic('success');
+    showToast(STRINGS.shareCopied);
+  } else {
+    els.shareLink.focus();
+    els.shareLink.select();
+  }
+});
+
+els.shareRevoke.addEventListener('click', () => {
+  if (!state.shareToken) return;
+  void (async () => {
+    const ok = await showConfirm(STRINGS.shareRevokeConfirm);
+    if (!ok) return;
+    try {
+      await api.revokeShareLink(state.shareToken);
+      haptic('success');
+      showToast(STRINGS.shareRevoked);
+      state.shareToken = null;
+      els.shareLink.hidden = true;
+      els.shareCopy.hidden = true;
+      els.shareRevoke.hidden = true;
+      els.shareCreate.hidden = false;
+    } catch (error) {
+      showErrorToast(error);
+    }
+  })();
+});
+
+els.shareCreate.addEventListener('click', () => {
+  els.shareCreate.hidden = true;
+  void loadShareLink();
+});
 
 // ---------------------------------------------------------------------------
 // History sheet: commit list for the note file with per-version preview and

@@ -15,6 +15,7 @@ services:
       - TelegramBot__BotToken=${TELEGRAM_BOT_TOKEN:-}
       - TelegramBot__HostAddress=${TELEGRAM_HOST_ADDRESS:-}
       - TelegramBot__SecretToken=${TELEGRAM_SECRET_TOKEN:-}
+      - Sharing__PublicBaseUrl=${SHARING_PUBLIC_BASE_URL:-}
       - Serilog__WriteTo__Seq__Args__serverUrl=${SEQ_URL:-http://seq:5341}
     volumes:
       - ./data:/app/data

@@ -1,0 +1,126 @@
+/* ==========================================================================
+   Share page (/share/{token}) — chrome around the reused app.css preview.
+   The Mini App gets its palette from injected Telegram theme variables;
+   here :root provides the same fallback names, with a dark variant.
+   ========================================================================== */
+
+:root {
+  --tg-theme-bg-color: #ffffff;
+  --tg-theme-text-color: #222222;
+  --tg-theme-hint-color: #999999;
+  --tg-theme-link-color: #2481cc;
+  --tg-theme-button-color: #2481cc;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-secondary-bg-color: #f0f0f0;
+  --tg-theme-header-bg-color: #f0f0f0;
+  --tg-theme-accent-text-color: #2481cc;
+  --tg-theme-destructive-text-color: #e53935;
+  --tg-theme-section-separator-color: #e0e0e0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Telegram "Night" palette */
+    --tg-theme-bg-color: #17212b;
+    --tg-theme-text-color: #ffffff;
+    --tg-theme-hint-color: #aaaaaa;
+    --tg-theme-link-color: #6ab3f3;
+    --tg-theme-button-color: #5288c1;
+    --tg-theme-button-text-color: #ffffff;
+    --tg-theme-secondary-bg-color: #232e3c;
+    --tg-theme-header-bg-color: #17212b;
+    --tg-theme-accent-text-color: #6ab3f3;
+    --tg-theme-destructive-text-color: #ef5b5b;
+    --tg-theme-section-separator-color: #101921;
+  }
+}
+
+.share-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 var(--pad) calc(24px + env(safe-area-inset-bottom));
+}
+
+.share-header {
+  padding: 14px 0 6px;
+}
+
+.share-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--tg-hint);
+}
+
+.share-brand svg { flex-shrink: 0; }
+
+/* Loading / error state */
+.share-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--tg-hint);
+  font-size: 14px;
+  text-align: center;
+  padding: 40px 0;
+}
+
+.share-state.is-error { color: var(--tg-destructive); }
+
+.share-state-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--tg-section-sep);
+  border-top-color: var(--tg-button);
+  border-radius: 50%;
+  animation: share-spin 0.8s linear infinite;
+}
+
+@keyframes share-spin {
+  to { transform: rotate(360deg); }
+}
+
+.share-state.is-error .share-state-spinner { display: none; }
+
+.share-note {
+  flex: 1;
+  animation: share-in 0.25s ease;
+}
+
+@keyframes share-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.share-note h1 {
+  /* Override the global app.css h1 rule: here it is the note title. */
+  font-size: 24px;
+  margin: 8px 0 4px;
+  overflow-wrap: break-word;
+}
+
+.share-note .editor-preview { padding: 12px 0 24px; }
+
+/* Read-only page: kanban cards are not editable, so hide the interactive
+   controls the shared renderer emits for the editor preview. */
+#editor-container .editor-preview .kanban-add,
+#editor-container .editor-preview .kanban-info { display: none; }
+
+#editor-container .editor-preview .kanban-card { cursor: default; }
+
+.share-footer {
+  border-top: 1px solid var(--tg-section-sep);
+  padding-top: 14px;
+  color: var(--tg-hint);
+  font-size: 12px;
+  text-align: center;
+}

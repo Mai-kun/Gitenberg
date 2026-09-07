@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -21,6 +22,16 @@ public class TelegramAuthValidatorTests
     /// sort the remaining keys alphabetically and HMAC-SHA256 the data check string with
     /// the WebAppData-derived secret key.
     /// </summary>
+    private static string Sign(string botToken, string dataCheckString)
+    {
+        var secretKey = HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes("WebAppData"),
+            Encoding.UTF8.GetBytes(botToken));
+
+        return Convert.ToHexString(HMACSHA256.HashData(secretKey, Encoding.UTF8.GetBytes(dataCheckString)))
+            .ToLowerInvariant();
+    }
+
     private static string BuildInitData(
         long userId = 12345,
         string? firstName = "Ivan",
@@ -271,6 +282,59 @@ public class TelegramAuthValidatorTests
         var result = validator.Validate(initData);
 
         result.IsValid.Should().BeTrue();
+    }
+
+    // If Telegram signed the percent-encoded (raw) values instead of the decoded
+    // ones, the primary check fails and the raw fallback must accept the data.
+    [Fact]
+    public void Validate_WhenHashSignedOverRawCheckString_AcceptsViaFallback()
+    {
+        var authDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var userJson = JsonSerializer.Serialize(new TelegramUser(12345, "Дима Иванов", null, "dima_test"));
+        var rawUser = Uri.EscapeDataString(userJson);
+        var rawCheckString = $"auth_date={authDate}\nuser={rawUser}";
+        var hash = Sign(TestBotToken, rawCheckString);
+        var initData = $"auth_date={authDate}&hash={hash}&user={rawUser}";
+
+        var result = _validator.Validate(initData);
+
+        result.IsValid.Should().BeTrue();
+        result.User!.Id.Should().Be(12345);
+        result.User.FirstName.Should().Be("Дима Иванов");
+    }
+
+    // The getMe probe must never influence the validation outcome, whatever
+    // Telegram answers (valid bot info, rejected token, or a non-JSON error page).
+    [Theory]
+    [InlineData("{\"ok\":true,\"result\":{\"id\":42,\"is_bot\":true,\"first_name\":\"Right\",\"username\":\"right_bot\"}}")]
+    [InlineData("{\"ok\":false,\"error_code\":401,\"description\":\"Unauthorized\"}")]
+    [InlineData("<html>502 Bad Gateway</html>")]
+    public void Validate_WithHashMismatchAndProbeConfigured_StillReturnsInvalid(string getMePayload)
+    {
+        var factory = new StubHttpClientFactory(new StubHttpMessageHandler(
+            HttpStatusCode.OK, getMePayload));
+        var validator = new TelegramAuthValidator(
+            TestBotToken, NullLogger<TelegramAuthValidator>.Instance, factory);
+
+        // Signed with a different token, so the hash never matches.
+        var initData = BuildInitData(botToken: "654321:OTHER-TOKEN");
+
+        var result = validator.Validate(initData);
+
+        result.IsValid.Should().BeFalse();
+        result.Error.Should().Be("The 'hash' parameter does not match the computed signature.");
+    }
+
+    private sealed class StubHttpMessageHandler(HttpStatusCode statusCode, string payload) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(statusCode) { Content = new StringContent(payload) });
+    }
+
+    private sealed class StubHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
     }
 
     private static string ReplaceValue(string initData, string key, string newValue)
