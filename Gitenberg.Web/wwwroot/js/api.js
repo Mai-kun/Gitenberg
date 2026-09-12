@@ -1,13 +1,9 @@
 // Gitenberg API client.
 //
-// Auth model (must match TelegramAuthFilter on the backend):
-//  - Inside Telegram (initData present): send "Authorization: tma <initData>".
-//  - Outside Telegram (local development): omit Authorization entirely and send
-//    "X-Telegram-Id" instead. A header of "tma " with an empty payload would fail
-//    initData validation and return 401 even in Development — the dev fallback in
-//    the backend only activates when the Authorization header is ABSENT.
-
-const DEV_ID_STORAGE_KEY = 'gitenberg.devTelegramId';
+// Auth model (must match WebAuthFilter on the backend): a signed-in browser
+// holds an HTTP-only session cookie set by POST /api/auth/login. Requests
+// carry no credentials explicitly — same-origin cookies are attached by the
+// browser automatically; a 401 answer means "sign in again".
 
 export class ApiError extends Error {
   constructor(status, message) {
@@ -17,35 +13,10 @@ export class ApiError extends Error {
   }
 }
 
-function tg() {
-  return window.Telegram?.WebApp ?? null;
-}
-
-export function isInsideTelegram() {
-  const initData = tg()?.initData;
-  return typeof initData === 'string' && initData.length > 0;
-}
-
-export function getDevTelegramId() {
-  const stored = localStorage.getItem(DEV_ID_STORAGE_KEY);
-  if (stored && Number.isFinite(Number(stored)) && Number(stored) > 0) {
-    return Number(stored);
-  }
-  return 123456;
-}
-
-export function setDevTelegramId(id) {
-  localStorage.setItem(DEV_ID_STORAGE_KEY, String(id));
-}
-
 function authHeaders() {
   // The client's UTC offset (JS getTimezoneOffset semantics: UTC+3 → -180)
   // lets the backend bucket activity into the user's local day.
-  const tz = { 'X-Timezone-Offset': String(new Date().getTimezoneOffset()) };
-  if (isInsideTelegram()) {
-    return { Authorization: `tma ${tg().initData}`, ...tz };
-  }
-  return { 'X-Telegram-Id': String(getDevTelegramId()), ...tz };
+  return { 'X-Timezone-Offset': String(new Date().getTimezoneOffset()) };
 }
 
 function buildUrl(path, params) {
@@ -101,6 +72,7 @@ async function request(method, path, { params, body } = {}) {
       ...authHeaders(),
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
+    credentials: 'same-origin',
     body: body !== undefined ? JSON.stringify(body) : undefined,
     cache: 'no-store',
   });
@@ -118,17 +90,29 @@ async function request(method, path, { params, body } = {}) {
 // Typed helpers (exact backend contract, camelCase wire names)
 // ---------------------------------------------------------------------------
 
-export function registerUser(telegramId, githubToken, repositoryOwner, repositoryName, { inboxPath, attachmentsPath } = {}) {
-  return request('POST', '/api/register', {
+// ---------------------------------------------------------------------------
+// Session auth: sign in with a GitHub token (the backend validates it against
+// GitHub, binds a repository on first use and sets the session cookie)
+// ---------------------------------------------------------------------------
+
+export function login(githubToken, repositoryOwner, repositoryName, { inboxPath, attachmentsPath } = {}) {
+  return request('POST', '/api/auth/login', {
     body: {
-      telegramId,
-      githubToken,
+      gitHubToken: githubToken,
       repositoryOwner,
       repositoryName,
       ...(inboxPath ? { inboxPath } : {}),
       ...(attachmentsPath ? { attachmentsPath } : {}),
     },
   });
+}
+
+export function logout() {
+  return request('POST', '/api/auth/logout');
+}
+
+export function getSession() {
+  return request('GET', '/api/auth/session');
 }
 
 export function listNotes(path) {
@@ -286,6 +270,7 @@ export function listRepositoryFolders({ repositoryOwner, repositoryName, githubT
 export async function downloadExportArchive() {
   const response = await fetch(buildUrl('/api/export/archive'), {
     headers: authHeaders(),
+    credentials: 'same-origin',
     cache: 'no-store',
   });
 
