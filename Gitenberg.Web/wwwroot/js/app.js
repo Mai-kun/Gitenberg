@@ -49,6 +49,14 @@ function plural(n, one, few, many) {
   return many;
 }
 
+// True when the page runs inside a real Telegram client. Outside Telegram
+// the SDK stub reports platform 'unknown' and renders no MainButton, so
+// in-page fallback controls must stay visible there.
+function isTelegramClient() {
+  const webApp = tg();
+  return Boolean(webApp && webApp.platform && webApp.platform !== 'unknown');
+}
+
 function showConfirm(message) {
   const webApp = tg();
   // Outside Telegram the SDK still exposes a WebApp stub whose showConfirm
@@ -151,6 +159,7 @@ const els = {
   editorStatus: $('editor-status'),
   notePath: $('note-path'),
   editorContainer: $('editor-container'),
+  editorActions: document.querySelector('.editor-actions'),
   btnEditorSave: $('btn-editor-save'),
   toast: $('toast'),
   infoModal: $('info-modal'),
@@ -1271,6 +1280,10 @@ function openEditor(mode, path) {
   updateBackButton();
 
   mainButton.show(STRINGS.saveBtnIdle, () => void saveCurrentNote());
+  // Inside Telegram the MainButton above is the save control — a second,
+  // in-page button would duplicate it. Outside Telegram the MainButton
+  // renders nothing, so the in-page button is the only way to save.
+  els.editorActions.hidden = isTelegramClient();
   setButtonBusy(els.btnEditorSave, false, STRINGS.saveBtnBusy, STRINGS.saveBtnIdle);
 
   if (mode === 'edit') {

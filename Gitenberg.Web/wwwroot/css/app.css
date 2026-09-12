@@ -1252,10 +1252,14 @@ input, textarea {
 /* Desktop polish: constrain width like a phone app */
 @media (min-width: 640px) {
   #view-explorer > .explorer-header,
+  #view-explorer > .explorer-tabs,
+  #view-explorer > .activity-card,
   #view-explorer > .breadcrumbs,
   #view-explorer > .search-wrap,
   #view-explorer > .search-results,
   #view-explorer > .notes-list,
+  #view-explorer > .tasks-toolbar,
+  #view-explorer > .tasks-list,
   #view-editor > .editor-header,
   #view-editor > .preview-banner,
   #view-editor > .editor-path-field,
@@ -1263,11 +1267,17 @@ input, textarea {
   #view-editor > .editor-actions,
   #view-editor > .status-text,
   #view-explorer > .status-text,
+  #view-settings > .settings-body,
   #view-explorer > .search-hint {
     max-width: 640px;
     width: 100%;
     margin-left: auto;
     margin-right: auto;
+  }
+
+  /* Keep the FAB pinned to the centered column, not the window edge. */
+  .fab {
+    right: calc(50% - 320px + 20px + env(safe-area-inset-right));
   }
 }
 
