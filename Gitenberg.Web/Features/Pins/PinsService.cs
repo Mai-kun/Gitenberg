@@ -21,9 +21,9 @@ public class PinsService(AppDbContext dbContext)
             """);
     }
 
-    public async Task<List<PinnedItem>> ListAsync(long telegramId, int repositoryId)
+    public async Task<List<PinnedItem>> ListAsync(long userId, int repositoryId)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var rows = await dbContext.Database.SqlQuery<PinRow>(
             $"SELECT ItemPath, PinnedAt FROM PinnedItems WHERE TelegramUserId = {uid} AND RepositoryId = {rid} ORDER BY ItemPath"
@@ -34,9 +34,9 @@ public class PinsService(AppDbContext dbContext)
             .ToList();
     }
 
-    public async Task PinAsync(long telegramId, int repositoryId, string itemPath)
+    public async Task PinAsync(long userId, int repositoryId, string itemPath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var path = itemPath.Trim('/');
         if (path.Length == 0)
@@ -50,9 +50,9 @@ public class PinsService(AppDbContext dbContext)
         );
     }
 
-    public async Task UnpinAsync(long telegramId, int repositoryId, string itemPath)
+    public async Task UnpinAsync(long userId, int repositoryId, string itemPath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var path = itemPath.Trim('/');
         if (path.Length == 0)
@@ -70,9 +70,9 @@ public class PinsService(AppDbContext dbContext)
     // via substr instead of LIKE — LIKE is ASCII-case-insensitive and treats
     // '_' as a wildcard, so "inbox/my_notes/…" would wrongly match
     // "inbox/myXnotes/…".
-    public async Task ReassignOnMoveAsync(long telegramId, int repositoryId, string fromPath, string toPath)
+    public async Task ReassignOnMoveAsync(long userId, int repositoryId, string fromPath, string toPath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var from = fromPath.Trim('/');
         var to = toPath.Trim('/');
@@ -93,9 +93,9 @@ public class PinsService(AppDbContext dbContext)
 
     // Drops the pin of a deleted item plus pins of everything below it
     // (deleting a folder deletes its content).
-    public async Task RemoveForPathAsync(long telegramId, int repositoryId, string itemPath)
+    public async Task RemoveForPathAsync(long userId, int repositoryId, string itemPath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var path = itemPath.Trim('/');
         if (path.Length == 0)

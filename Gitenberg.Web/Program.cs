@@ -1,17 +1,15 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Activity;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Features.Export;
+using Gitenberg.Web.Features.Graph;
 using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Pins;
-using Gitenberg.Web.Features.Registration;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Repositories;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.Shares;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Features.Tasks;
-using Gitenberg.Web.Features.TelegramBot;
-using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
@@ -20,7 +18,6 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Threading.RateLimiting;
-using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,35 +43,17 @@ builder.Services.AddDataProtection()
         .SetApplicationName("GitenbergApp");
 builder.Services.AddSingleton<ITokenEncryptionService, TokenEncryptionService>();
 builder.Services.AddScoped<IGitHubService, GitHubService>();
+builder.Services.AddSingleton<IGitHubIdentityService, GitHubIdentityService>();
 builder.Services.AddScoped<IRepositoryContextResolver, RepositoryContextResolver>();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
-var botConfig = builder.Configuration
-                        .GetSection(BotConfiguration.SectionName)
-                        .Get<BotConfiguration>()
-                ?? new BotConfiguration();
-builder.Services.AddSingleton(botConfig);
-
-if (!string.IsNullOrWhiteSpace(botConfig.BotToken))
-{
-    builder.Services.AddHttpClient("tgwebhook")
-            .AddTypedClient<ITelegramBotClient>((httpClient, sp) => new TelegramBotClient(botConfig.BotToken, httpClient));
-    builder.Services.AddHostedService<ConfigureWebhook>();
-    builder.Services.AddSingleton<BotIdentityService>();
-    builder.Services.AddHostedService<ReminderDispatchService>();
-}
-builder.Services.AddScoped<UpdateHandler>();
-builder.Services.AddScoped<InlineSearchHandler>();
-builder.Services.AddScoped<ReminderService>();
-builder.Services.AddScoped<ActivityService>();
-builder.Services.AddScoped<PinsService>();
-builder.Services.AddSingleton<InlineFileLinkService>();
-builder.Services.AddSingleton<ITelegramAuthValidator>(sp =>
-    new TelegramAuthValidator(
-        botConfig.BotToken,
-        sp.GetRequiredService<ILogger<TelegramAuthValidator>>(),
-        sp.GetService<IHttpClientFactory>()));
+var webAuthConfig = builder.Configuration
+                          .GetSection(WebAuthConfiguration.SectionName)
+                          .Get<WebAuthConfiguration>()
+                  ?? new WebAuthConfiguration();
+builder.Services.AddSingleton(webAuthConfig);
+builder.Services.AddScoped<WebAuthService>();
 
 var searchConfig = builder.Configuration
                            .GetSection(SearchConfiguration.SectionName)
@@ -98,9 +77,12 @@ var shareConfig = builder.Configuration
                  ?? new ShareConfiguration();
 builder.Services.AddSingleton(shareConfig);
 builder.Services.AddScoped<ShareLinksService>();
+builder.Services.AddScoped<ActivityService>();
+builder.Services.AddScoped<PinsService>();
 
 // Public share endpoints are guarded only by the unguessable token, so the
-// rate limiter blunts brute-force sweeps over /api/share/{token}.
+// rate limiter blunts brute-force sweeps over /api/share/{token}; the auth
+// policy does the same for repeated sign-in attempts.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -110,6 +92,14 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1)
             }));
 });
@@ -130,12 +120,12 @@ using (var scope = app.Services.CreateScope())
     db.EnsureFtsTableCreated();
     db.EnsureUserCaptureColumnsCreated();
     PendingSyncService.EnsureTableCreated(db);
-    ReminderService.EnsureTableCreated(db);
     ActivityService.EnsureTableCreated(db);
     PinsService.EnsureTableCreated(db);
     ShareLinksService.EnsureTableCreated(db);
-    // Requires the FTS, PendingNoteOps and Reminders tables to exist already.
+    // Requires the FTS and PendingNoteOps tables to exist already.
     db.EnsureRepositoriesTableCreated();
+    WebAuthService.EnsureTableCreated(db);
 }
 
 app.UseDefaultFiles();
@@ -151,16 +141,16 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
+app.MapAuthEndpoints();
 app.MapNotesEndpoints();
 app.MapHistoryEndpoints();
-app.MapRegistrationEndpoints();
 app.MapRepositoriesEndpoints();
-app.MapBotEndpoints();
 app.MapSearchEndpoints();
 app.MapSyncEndpoints();
 app.MapExportEndpoints();
 app.MapActivityEndpoints();
 app.MapTasksEndpoints();
+app.MapGraphEndpoints();
 app.MapPinsEndpoints();
 app.MapShareEndpoints();
 

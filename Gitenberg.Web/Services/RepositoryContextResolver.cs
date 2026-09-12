@@ -12,9 +12,9 @@ public class RepositoryContextResolver(
     ILogger<RepositoryContextResolver> logger
 ) : IRepositoryContextResolver
 {
-    public async Task<ResolvedRepository?> ResolveActiveAsync(long telegramId, CancellationToken cancellationToken = default)
+    public async Task<ResolvedRepository?> ResolveActiveAsync(long userId, CancellationToken cancellationToken = default)
     {
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId, cancellationToken);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId, cancellationToken);
         if (user == null)
         {
             return null;
@@ -22,7 +22,7 @@ public class RepositoryContextResolver(
 
         if (user.SelectedRepositoryId is { } selectedId)
         {
-            var selected = await ResolveByIdAsync(telegramId, selectedId, cancellationToken);
+            var selected = await ResolveByIdAsync(userId, selectedId, cancellationToken);
             if (selected != null)
             {
                 return selected;
@@ -32,14 +32,14 @@ public class RepositoryContextResolver(
         // Selection missing or stale (repository deleted elsewhere) — first wins.
         var first = await dbContext.Repositories
             .OrderBy(r => r.Id)
-            .FirstOrDefaultAsync(r => r.TelegramUserId == telegramId, cancellationToken);
+            .FirstOrDefaultAsync(r => r.TelegramUserId == userId, cancellationToken);
         return first == null ? null : Build(first);
     }
 
-    public async Task<ResolvedRepository?> ResolveByIdAsync(long telegramId, int repositoryId, CancellationToken cancellationToken = default)
+    public async Task<ResolvedRepository?> ResolveByIdAsync(long userId, int repositoryId, CancellationToken cancellationToken = default)
     {
         var repository = await dbContext.Repositories
-            .FirstOrDefaultAsync(r => r.Id == repositoryId && r.TelegramUserId == telegramId, cancellationToken);
+            .FirstOrDefaultAsync(r => r.Id == repositoryId && r.TelegramUserId == userId, cancellationToken);
         return repository == null ? null : Build(repository);
     }
 

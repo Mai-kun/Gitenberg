@@ -1,5 +1,5 @@
 using Gitenberg.Web.Database;
-using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -13,7 +13,7 @@ public static class ActivityEndpoints
     {
         var group = app.MapGroup("/api/activity")
                        .WithTags("Activity")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapGet("/heatmap", GetHeatmap)
              .WithName("GetActivityHeatmap")
@@ -22,8 +22,6 @@ public static class ActivityEndpoints
 
     public static async Task<IResult> GetHeatmap(
         [FromHeader(Name = "X-Timezone-Offset")] int? timezoneOffset,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
         AppDbContext dbContext,
@@ -35,16 +33,16 @@ public static class ActivityEndpoints
             return Results.BadRequest(new { Error = "'from' must not be later than 'to'." });
         }
 
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." }
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." }
             );
         }
 
         var service = new ActivityService(dbContext);
-        var days = await service.GetHeatmapAsync(telegramId.Value, timezoneOffset, from: from, to: to);
+        var days = await service.GetHeatmapAsync(userId.Value, timezoneOffset, from: from, to: to);
         return Results.Ok(new { Days = days, Total = days.Sum(d => d.Count) });
     }
 }

@@ -60,15 +60,15 @@ public class HistoryEndpointsTests
     private IRepositoryContextResolver CreateResolver(AppDbContext db) =>
         new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance);
 
-    private static int ActiveRepoId(AppDbContext db, long telegramId) =>
-        db.Repositories.Where(r => r.TelegramUserId == telegramId).OrderBy(r => r.Id).First().Id;
+    private static int ActiveRepoId(AppDbContext db, long userId) =>
+        db.Repositories.Where(r => r.TelegramUserId == userId).OrderBy(r => r.Id).First().Id;
 
-    private async Task CreateUserAsync(AppDbContext db, long telegramId, string? token = "pat_123")
+    private async Task CreateUserAsync(AppDbContext db, long userId, string? token = "pat_123")
     {
         var encryptedToken = token == null ? null : _encryptionService.EncryptToken(token, TimeSpan.FromMinutes(10));
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -77,7 +77,7 @@ public class HistoryEndpointsTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/repo",
             RepositoryOwner = "owner",
             RepositoryName = "repo",

@@ -25,9 +25,9 @@ public class ShareLinksService(AppDbContext dbContext)
             """);
     }
 
-    public async Task<ShareLink> CreateOrGetAsync(long telegramId, int repositoryId, string notePath)
+    public async Task<ShareLink> CreateOrGetAsync(long userId, int repositoryId, string notePath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var path = NormalizePath(notePath);
 
@@ -49,12 +49,12 @@ public class ShareLinksService(AppDbContext dbContext)
         // A concurrent request may have won the insert (INSERT OR IGNORE):
         // hand out the stored token, never the discarded one.
         return await QueryActiveAsync(uid, rid, path)
-               ?? new ShareLink(token, telegramId, repositoryId, path, createdAt);
+               ?? new ShareLink(token, userId, repositoryId, path, createdAt);
     }
 
-    public async Task<ShareLink?> GetActiveAsync(long telegramId, int repositoryId, string notePath)
+    public async Task<ShareLink?> GetActiveAsync(long userId, int repositoryId, string notePath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         return await QueryActiveAsync(uid, rid, NormalizePath(notePath));
     }
@@ -72,9 +72,9 @@ public class ShareLinksService(AppDbContext dbContext)
         return row == null ? null : MapRow(row);
     }
 
-    public async Task<bool> RevokeAsync(long telegramId, string token)
+    public async Task<bool> RevokeAsync(long userId, string token)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var affected = await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE NoteShareLinks SET RevokedAt = {DateTime.UtcNow.ToString("o")} WHERE Token = {token} AND TelegramUserId = {uid} AND RevokedAt IS NULL"
         );
@@ -85,9 +85,9 @@ public class ShareLinksService(AppDbContext dbContext)
     // (renaming a folder drags its shared content along). Same prefix
     // comparison as PinsService — substr instead of LIKE, which is
     // ASCII-case-insensitive and treats '_' as a wildcard.
-    public async Task ReassignOnMoveAsync(long telegramId, int repositoryId, string fromPath, string toPath)
+    public async Task ReassignOnMoveAsync(long userId, int repositoryId, string fromPath, string toPath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var from = NormalizePath(fromPath);
         var to = NormalizePath(toPath);
@@ -108,9 +108,9 @@ public class ShareLinksService(AppDbContext dbContext)
 
     // Revokes links of a deleted item plus everything below it (deleting a
     // folder deletes its content).
-    public async Task RemoveForPathAsync(long telegramId, int repositoryId, string notePath)
+    public async Task RemoveForPathAsync(long userId, int repositoryId, string notePath)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         var path = NormalizePath(notePath);
         if (path.Length == 0)

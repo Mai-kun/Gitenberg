@@ -47,7 +47,7 @@ public class RepositoryFoldersEndpointTests
 
     private async Task<(User User, Repository Repository)> SeedUserWithRepositoryAsync(
         AppDbContext db,
-        long telegramId = 12345,
+        long userId = 12345,
         string owner = "owner",
         string repo = "notes-repo",
         string? token = "stored_token"
@@ -55,7 +55,7 @@ public class RepositoryFoldersEndpointTests
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -64,7 +64,7 @@ public class RepositoryFoldersEndpointTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = $"{owner}/{repo}",
             RepositoryOwner = owner,
             RepositoryName = repo,
@@ -167,8 +167,8 @@ public class RepositoryFoldersEndpointTests
     public async Task ListFolders_ShouldReturnNotFound_WhenRepositoryIdIsUnknownOrForeign()
     {
         await using var db = CreateInMemoryDbContext();
-        var (user, _) = await SeedUserWithRepositoryAsync(db, telegramId: 12345);
-        var (_, foreignRepo) = await SeedUserWithRepositoryAsync(db, telegramId: 777);
+        var (user, _) = await SeedUserWithRepositoryAsync(db, userId: 12345);
+        var (_, foreignRepo) = await SeedUserWithRepositoryAsync(db, userId: 777);
 
         var unknown = new RepositoryFoldersRequest("owner", "repo", RepositoryId: 99999);
         var resultUnknown = await RepositoriesEndpoints.ListRepositoryFolders(

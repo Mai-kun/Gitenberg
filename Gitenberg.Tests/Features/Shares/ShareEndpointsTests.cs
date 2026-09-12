@@ -65,11 +65,11 @@ public class ShareEndpointsTests
         return new ShareLinksService(db);
     }
 
-    private async Task<User> CreateUserAsync(AppDbContext db, long telegramId, string token = "pat_123")
+    private async Task<User> CreateUserAsync(AppDbContext db, long userId, string token = "pat_123")
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -78,7 +78,7 @@ public class ShareEndpointsTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/repo",
             RepositoryOwner = "owner",
             RepositoryName = "repo",

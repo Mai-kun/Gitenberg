@@ -59,11 +59,11 @@ public class RegistrationEndpointsTests
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(-12345)]
-    public async Task RegisterUser_ShouldReturnBadRequest_WhenTelegramIdIsInvalid(long telegramId)
+    public async Task RegisterUser_ShouldReturnBadRequest_WhenTelegramIdIsInvalid(long userId)
     {
         // Arrange
         await using var db = CreateInMemoryDbContext();
-        var request = new RegisterUserRequest(telegramId, "token", "owner", "repo");
+        var request = new RegisterUserRequest(userId, "token", "owner", "repo");
 
         // Act
         var result = await RegistrationEndpoints.RegisterUser(request, db, _encryptionService);
@@ -287,7 +287,7 @@ public class RegistrationEndpointsTests
 
     private async Task<(User User, Repository Repository)> SeedUserWithRepositoryAsync(
         AppDbContext db,
-        long telegramId,
+        long userId,
         string token,
         string owner,
         string repo,
@@ -297,7 +297,7 @@ public class RegistrationEndpointsTests
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             GitHubToken = _encryptionService.EncryptToken(token, TimeSpan.FromMinutes(10)),
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             LastActivityAt = DateTime.UtcNow.AddDays(-1),
@@ -307,7 +307,7 @@ public class RegistrationEndpointsTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = $"{owner}/{repo}",
             RepositoryOwner = owner,
             RepositoryName = repo,

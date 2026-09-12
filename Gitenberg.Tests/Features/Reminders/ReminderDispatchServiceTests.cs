@@ -49,11 +49,11 @@ public class ReminderDispatchServiceTests
         return (service, provider);
     }
 
-    private async Task SeedUserAsync(AppDbContext db, long telegramId = 42)
+    private async Task SeedUserAsync(AppDbContext db, long userId = 42)
     {
         db.Users.Add(new Gitenberg.Web.Models.User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             GitHubToken = "encrypted-token",
             RepositoryOwner = "owner",
             RepositoryName = "repo",

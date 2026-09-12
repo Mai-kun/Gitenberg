@@ -82,11 +82,11 @@ public class InlineSearchHandlerTests
         return (RepositoryContent)constructor.Invoke(args);
     }
 
-    private async Task<User> SeedUserAsync(AppDbContext db, long telegramId = 12345)
+    private async Task<User> SeedUserAsync(AppDbContext db, long userId = 12345)
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -95,7 +95,7 @@ public class InlineSearchHandlerTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/repo",
             RepositoryOwner = "owner",
             RepositoryName = "repo",
@@ -125,10 +125,10 @@ public class InlineSearchHandlerTests
         );
     }
 
-    private static InlineQuery CreateInlineQuery(string query, long telegramId = 12345) => new()
+    private static InlineQuery CreateInlineQuery(string query, long userId = 12345) => new()
     {
         Id = "inline-query-id",
-        From = new Telegram.Bot.Types.User { Id = telegramId, IsBot = false, FirstName = "Test" },
+        From = new Telegram.Bot.Types.User { Id = userId, IsBot = false, FirstName = "Test" },
         Query = query,
     };
 
@@ -143,7 +143,7 @@ public class InlineSearchHandlerTests
         var handler = CreateHandler(db);
 
         // Act
-        await handler.HandleInlineQueryAsync(CreateInlineQuery("kernel", telegramId: 999), CancellationToken.None);
+        await handler.HandleInlineQueryAsync(CreateInlineQuery("kernel", userId: 999), CancellationToken.None);
 
         // Assert
         var answer = SingleAnswer();

@@ -58,11 +58,11 @@ public class PinsEndpointsTests
     private IRepositoryContextResolver CreateResolver(AppDbContext db) =>
         new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance);
 
-    private async Task<Repository> SeedUserWithRepositoryAsync(AppDbContext db, long telegramId = 12345)
+    private async Task<Repository> SeedUserWithRepositoryAsync(AppDbContext db, long userId = 12345)
     {
         db.Users.Add(new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         });
@@ -70,7 +70,7 @@ public class PinsEndpointsTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/first",
             RepositoryOwner = "owner",
             RepositoryName = "first",
@@ -82,7 +82,7 @@ public class PinsEndpointsTests
         db.Repositories.Add(repository);
         await db.SaveChangesAsync();
 
-        var user = await db.Users.FirstAsync(u => u.TelegramId == telegramId);
+        var user = await db.Users.FirstAsync(u => u.TelegramId == userId);
         user.SelectedRepositoryId = repository.Id;
         await db.SaveChangesAsync();
         return repository;

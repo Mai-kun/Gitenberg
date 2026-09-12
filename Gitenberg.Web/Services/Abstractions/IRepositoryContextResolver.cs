@@ -11,7 +11,7 @@ public sealed record ResolvedRepository(Repository Repository, string DecryptedT
 
 public interface IRepositoryContextResolver
 {
-    Task<ResolvedRepository?> ResolveActiveAsync(long telegramId, CancellationToken cancellationToken = default);
+    Task<ResolvedRepository?> ResolveActiveAsync(long userId, CancellationToken cancellationToken = default);
 
-    Task<ResolvedRepository?> ResolveByIdAsync(long telegramId, int repositoryId, CancellationToken cancellationToken = default);
+    Task<ResolvedRepository?> ResolveByIdAsync(long userId, int repositoryId, CancellationToken cancellationToken = default);
 }

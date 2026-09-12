@@ -1,6 +1,6 @@
 using System.Globalization;
 using Gitenberg.Web.Database;
-using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -14,7 +14,7 @@ public static class SearchEndpoints
     {
         var group = app.MapGroup("/api/notes")
                        .WithTags("Search")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapGet("/search", SearchNotes)
              .WithName("SearchNotes")
@@ -23,22 +23,20 @@ public static class SearchEndpoints
 
     public static async Task<IResult> SearchNotes(
         [FromQuery] string? query,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         NoteIndexer indexer,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -50,13 +48,13 @@ public static class SearchEndpoints
             );
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.Ok(new List<NoteSearchResult>());
@@ -67,7 +65,7 @@ public static class SearchEndpoints
         // from external sources included).
         try
         {
-            await indexer.SynchronizeUserByIdAsync(telegramId.Value, repository.RepositoryId);
+            await indexer.SynchronizeUserByIdAsync(userId.Value, repository.RepositoryId);
         }
         catch
         {
@@ -91,7 +89,7 @@ public static class SearchEndpoints
                 SELECT NotePath,
                        snippet(NoteSearchFts, 3, '<b>', '</b>', '...', 10) AS Snippet
                 FROM NoteSearchFts
-                WHERE TelegramUserId = {telegramId.Value.ToString(CultureInfo.InvariantCulture)}
+                WHERE TelegramUserId = {userId.Value.ToString(CultureInfo.InvariantCulture)}
                   AND RepositoryId = {repository.RepositoryId.ToString(CultureInfo.InvariantCulture)}
                   AND NoteSearchFts MATCH {matchExpression}
                 ORDER BY rank
