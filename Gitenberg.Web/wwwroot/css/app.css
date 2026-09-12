@@ -680,6 +680,16 @@ input[type="checkbox"] {
 
 .fab:active { transform: scale(0.94); }
 
+/* Secondary action ("create from template") floating above the primary FAB */
+.fab-secondary {
+  bottom: calc(94px + env(safe-area-inset-bottom));
+  width: 44px;
+  height: 44px;
+  background: var(--tg-secondary);
+  color: var(--tg-text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
 /* ==========================================================================
    Editor
    ========================================================================== */
@@ -1234,6 +1244,29 @@ input[type="checkbox"] {
   text-align: center;
   color: var(--tg-hint);
   font-size: 14px;
+}
+
+/* Templates sheet: a selected template is marked with the accent bar, and the
+   preview shows the substituted result exactly as it will land in the note. */
+.template-row.is-selected {
+  background: var(--tg-secondary);
+  box-shadow: inset 2px 0 0 var(--tg-button);
+}
+
+.templates-preview {
+  margin: 0 0 14px;
+  padding: 12px;
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--tg-secondary);
+  color: var(--tg-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ==========================================================================

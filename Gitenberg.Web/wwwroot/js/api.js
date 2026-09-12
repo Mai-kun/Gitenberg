@@ -194,6 +194,12 @@ export function searchNotes(query) {
   return request('GET', '/api/notes/search', { params: { query } });
 }
 
+// Note templates: .md files of the repository's templates/ folder, each with
+// its content so a new note can be filled from one request.
+export function listTemplates() {
+  return request('GET', '/api/templates');
+}
+
 // Pins (per active repository; the server normalizes the path).
 export function listPins() {
   return request('GET', '/api/pins');
