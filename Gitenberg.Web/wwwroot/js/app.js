@@ -5,6 +5,7 @@ import * as api from './api.js';
 import * as editor from './editor.js';
 import { getVaultIndex, invalidateVaultIndex } from './vault.js';
 import { initI18n, t, getLang, setLang, applyStatic } from './i18n.js';
+import { applyTheme, getTheme, setTheme } from './theme.js';
 
 // ---------------------------------------------------------------------------
 // UI strings (i18n: RU/EN, auto-detected on first run)
@@ -220,6 +221,7 @@ const els = {
   btnRepoDelete: $('btn-repo-delete'),
   settingsAutosave: $('settings-autosave'),
   settingsAutosync: $('settings-autosync'),
+  settingsTheme: $('settings-theme'),
   settingsError: $('settings-error'),
   settingsSave: $('settings-save'),
   btnExport: $('btn-export'),
@@ -235,6 +237,12 @@ const els = {
   activitySummary: $('activity-summary'),
   activityChevron: $('activity-chevron'),
   activityBody: $('activity-body'),
+  heatmapModeWeek: $('heatmap-mode-week'),
+  heatmapModeMonth: $('heatmap-mode-month'),
+  heatmapMonth: $('heatmap-month'),
+  heatmapYear: $('heatmap-year'),
+  heatmapWeek: $('heatmap-week'),
+  heatmapWeekdays: $('heatmap-weekdays'),
   heatmapGrid: $('heatmap-grid'),
   tasksToolbar: $('tasks-toolbar'),
   tasksFilterActive: $('tasks-filter-active'),
@@ -802,10 +810,22 @@ function handleBackNavigation() {
 }
 
 // ---------------------------------------------------------------------------
-// Activity heatmap (GitHub contribution style) — root level only
+// Activity statistics — week / month views with a month & year picker
 // ---------------------------------------------------------------------------
 
 let heatmapCollapsed = localStorage.getItem('gitenberg.activity.collapsed') === '1';
+
+const ACTIVITY_MODE_KEY = 'gitenberg.activity.mode';
+const ACTIVITY_PERIOD_KEY = 'gitenberg.activity.period'; // 'YYYY-MM'
+const ACTIVITY_WEEK_KEY = 'gitenberg.activity.week'; // week index inside the month
+// The default heatmap fetch covers the last 371 days; periods fully inside that
+// window are filtered locally, older ones go through a from/to request.
+const ACTIVITY_WINDOW_DAYS = 371;
+
+let activityDays = []; // daily counts of the default (last-year) fetch
+let activityPeriodCache = new Map(); // 'from..to' -> days, results of range fetches
+let activitySeq = 0; // guards against out-of-order period responses
+const activitySel = { mode: 'month', year: 0, month: 0, week: 0 };
 
 function localDateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -821,31 +841,184 @@ function heatmapLevel(count) {
   return 'level-4';
 }
 
-function renderHeatmap(days) {
-  const counts = new Map(days.map((d) => [d.date, d.count]));
+function addDays(date, n) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + n);
+  return copy;
+}
+
+// Monday-first start of the week containing the date (RU convention).
+function startOfWeek(date) {
+  return addDays(date, -((date.getDay() + 6) % 7));
+}
+
+// Monday-first calendar weeks overlapping the given month.
+function monthWeeks(year, month) {
+  const first = new Date(year, month, 1);
+  const lead = (first.getDay() + 6) % 7;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const weekCount = Math.ceil((lead + lastDay) / 7);
+  const gridStart = addDays(first, -lead);
+  return Array.from({ length: weekCount }, (_, i) => addDays(gridStart, i * 7));
+}
+
+function weekRangeLabel(weekStart) {
+  const short = STRINGS.activityMonthsShort;
+  const weekEnd = addDays(weekStart, 6);
+  const from = `${weekStart.getDate()} ${short[weekStart.getMonth()]}`;
+  const to = `${weekEnd.getDate()} ${short[weekEnd.getMonth()]}`;
+  return `${from} – ${to}`;
+}
+
+function restoreActivitySelection() {
+  const now = new Date();
+  activitySel.mode = localStorage.getItem(ACTIVITY_MODE_KEY) === 'week' ? 'week' : 'month';
+  activitySel.year = now.getFullYear();
+  activitySel.month = now.getMonth();
+  const stored = localStorage.getItem(ACTIVITY_PERIOD_KEY);
+  if (stored) {
+    const [y, m] = stored.split('-').map(Number);
+    if (y >= 2000 && y <= now.getFullYear() && m >= 1 && m <= 12) {
+      activitySel.year = y;
+      activitySel.month = m - 1;
+    }
+  }
+  const weeks = monthWeeks(activitySel.year, activitySel.month);
+  const storedWeek = Number(localStorage.getItem(ACTIVITY_WEEK_KEY));
+  if (Number.isInteger(storedWeek) && storedWeek >= 0 && storedWeek < weeks.length) {
+    activitySel.week = storedWeek;
+  } else {
+    const currentPeriod = activitySel.year === now.getFullYear() && activitySel.month === now.getMonth();
+    activitySel.week = 0;
+    if (currentPeriod) {
+      const index = weeks.findIndex((start) => start <= now && now <= addDays(start, 6));
+      if (index >= 0) activitySel.week = index;
+    }
+  }
+}
+
+function persistActivityPeriod() {
+  const mm = String(activitySel.month + 1).padStart(2, '0');
+  localStorage.setItem(ACTIVITY_PERIOD_KEY, `${activitySel.year}-${mm}`);
+  localStorage.setItem(ACTIVITY_WEEK_KEY, String(activitySel.week));
+}
+
+function renderWeekOptions() {
+  const weeks = monthWeeks(activitySel.year, activitySel.month);
+  if (activitySel.week >= weeks.length) activitySel.week = weeks.length - 1;
+  els.heatmapWeek.textContent = '';
+  weeks.forEach((weekStart, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = weekRangeLabel(weekStart);
+    els.heatmapWeek.append(option);
+  });
+  els.heatmapWeek.value = String(activitySel.week);
+}
+
+function applyActivityMode() {
+  const monthMode = activitySel.mode !== 'week';
+  els.heatmapModeWeek.classList.toggle('is-active', !monthMode);
+  els.heatmapModeMonth.classList.toggle('is-active', monthMode);
+  els.heatmapWeek.hidden = monthMode;
+}
+
+function renderActivityControls() {
+  const now = new Date();
+  const windowStart = addDays(now, -(ACTIVITY_WINDOW_DAYS - 1));
+  const years = [...new Set([now.getFullYear(), windowStart.getFullYear()])].sort((a, b) => b - a);
+
+  els.heatmapMonth.textContent = '';
+  STRINGS.activityMonths.forEach((name, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = name;
+    els.heatmapMonth.append(option);
+  });
+  els.heatmapMonth.value = String(activitySel.month);
+
+  if (!years.includes(activitySel.year)) [activitySel.year, activitySel.month] = [years[0], now.getMonth()];
+  els.heatmapYear.textContent = '';
+  years.forEach((year) => {
+    const option = document.createElement('option');
+    option.value = String(year);
+    option.textContent = String(year);
+    els.heatmapYear.append(option);
+  });
+  els.heatmapYear.value = String(activitySel.year);
+
+  renderWeekOptions();
+  applyActivityMode();
+}
+
+// First and last day of the selected period (a Monday-first week of the month
+// or the whole month).
+function activityPeriodRange() {
+  if (activitySel.mode === 'week') {
+    const start = monthWeeks(activitySel.year, activitySel.month)[activitySel.week] ?? startOfWeek(new Date());
+    return [start, addDays(start, 6)];
+  }
+  return [new Date(activitySel.year, activitySel.month, 1), new Date(activitySel.year, activitySel.month + 1, 0)];
+}
+
+async function loadActivityPeriod() {
+  const seq = ++activitySeq;
+  const [from, to] = activityPeriodRange();
+  const today = new Date();
+  const rangeEnd = to > today ? today : to;
+  let counts;
+  if (from >= addDays(today, -(ACTIVITY_WINDOW_DAYS - 1))) {
+    counts = new Map(activityDays.map((d) => [d.date, d.count]));
+  } else {
+    const cacheKey = `${localDateKey(from)}..${localDateKey(rangeEnd)}`;
+    try {
+      if (!activityPeriodCache.has(cacheKey)) {
+        const data = await api.getActivityHeatmap({ from: localDateKey(from), to: localDateKey(rangeEnd) });
+        activityPeriodCache.set(cacheKey, Array.isArray(data?.days) ? data.days : []);
+      }
+      counts = new Map(activityPeriodCache.get(cacheKey).map((d) => [d.date, d.count]));
+    } catch {
+      counts = new Map(); // an empty grid beats a stale one from another period
+    }
+  }
+  if (seq === activitySeq) renderActivityGrid(counts);
+}
+
+function renderActivityGrid(counts) {
+  const today = new Date();
+
+  els.heatmapWeekdays.textContent = '';
+  STRINGS.activityWeekdays.forEach((day) => {
+    const label = document.createElement('span');
+    label.className = 'heatmap-weekday';
+    label.textContent = day;
+    els.heatmapWeekdays.append(label);
+  });
+
+  let days;
+  if (activitySel.mode === 'week') {
+    const [from] = activityPeriodRange();
+    days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+  } else {
+    const weeks = monthWeeks(activitySel.year, activitySel.month);
+    days = Array.from({ length: weeks.length * 7 }, (_, i) => addDays(weeks[0], i));
+  }
+
   const grid = els.heatmapGrid;
   grid.textContent = '';
-
-  const today = new Date();
-  // Align columns to weeks, Monday first row (RU convention).
-  const mondayOffset = (today.getDay() + 6) % 7;
-  const currentWeekMonday = new Date(today);
-  currentWeekMonday.setDate(today.getDate() - mondayOffset);
-
-  const weeks = 53;
-  for (let w = weeks - 1; w >= 0; w -= 1) {
-    for (let dow = 0; dow < 7; dow += 1) {
-      const cellDate = new Date(currentWeekMonday);
-      cellDate.setDate(currentWeekMonday.getDate() - w * 7 + dow);
-      const key = localDateKey(cellDate);
-      const count = counts.get(key) ?? 0;
-
-      const cell = document.createElement('span');
-      cell.className = `heatmap-cell ${heatmapLevel(count)}`;
-      cell.title = `${key}: ${count}`;
-      if (cellDate > today) cell.classList.add('is-future');
-      grid.append(cell);
+  for (const day of days) {
+    const key = localDateKey(day);
+    const count = counts.get(key) ?? 0;
+    const cell = document.createElement('span');
+    cell.className = `heatmap-cell ${heatmapLevel(count)}`;
+    cell.textContent = String(day.getDate());
+    cell.title = `${key}: ${count}`;
+    if (day > today) {
+      cell.classList.add('is-future');
+    } else if (activitySel.mode !== 'week' && day.getMonth() !== activitySel.month) {
+      cell.classList.add('is-outside');
     }
+    grid.append(cell);
   }
 }
 
@@ -872,15 +1045,18 @@ function applyActivityCollapsed() {
 async function refreshHeatmap() {
   try {
     const data = await api.getActivityHeatmap();
-    const days = Array.isArray(data?.days) ? data.days : [];
-    renderHeatmap(days);
-    els.activitySummary.textContent = STRINGS.activitySummary(data?.total ?? 0, computeStreak(days));
+    activityDays = Array.isArray(data?.days) ? data.days : [];
+    els.activitySummary.textContent = STRINGS.activitySummary(data?.total ?? 0, computeStreak(activityDays));
     state.heatmapOk = true;
   } catch {
     state.heatmapOk = false;
   }
   if (!els.views.explorer.hidden) {
     els.activityCard.hidden = state.currentPath !== '' || !state.heatmapOk;
+  }
+  if (state.heatmapOk) {
+    renderActivityControls();
+    void loadActivityPeriod();
   }
 }
 
@@ -889,6 +1065,44 @@ els.activityToggle.addEventListener('click', () => {
   localStorage.setItem('gitenberg.activity.collapsed', heatmapCollapsed ? '1' : '0');
   applyActivityCollapsed();
 });
+
+els.heatmapModeWeek.addEventListener('click', () => {
+  activitySel.mode = 'week';
+  localStorage.setItem(ACTIVITY_MODE_KEY, 'week');
+  applyActivityMode();
+  void loadActivityPeriod();
+});
+
+els.heatmapModeMonth.addEventListener('click', () => {
+  activitySel.mode = 'month';
+  localStorage.setItem(ACTIVITY_MODE_KEY, 'month');
+  applyActivityMode();
+  void loadActivityPeriod();
+});
+
+els.heatmapMonth.addEventListener('change', () => {
+  activitySel.month = Number(els.heatmapMonth.value);
+  activitySel.week = 0;
+  persistActivityPeriod();
+  renderWeekOptions();
+  void loadActivityPeriod();
+});
+
+els.heatmapYear.addEventListener('change', () => {
+  activitySel.year = Number(els.heatmapYear.value);
+  activitySel.week = 0;
+  persistActivityPeriod();
+  renderWeekOptions();
+  void loadActivityPeriod();
+});
+
+els.heatmapWeek.addEventListener('change', () => {
+  activitySel.week = Number(els.heatmapWeek.value);
+  localStorage.setItem(ACTIVITY_WEEK_KEY, String(activitySel.week));
+  void loadActivityPeriod();
+});
+
+restoreActivitySelection();
 
 // ---------------------------------------------------------------------------
 // Tasks tab — all markdown checkboxes across the vault, toggle = new commit
@@ -2313,6 +2527,7 @@ async function openSettings() {
   els.settingsAutosync.checked = autosync;
   els.autosyncIntervalField.hidden = !autosync;
   els.settingsAutosyncInterval.value = String(autosyncIntervalMinutes());
+  els.settingsTheme.value = getTheme();
   showView('settings');
   backButton.show(handleBackNavigation);
   mainButton.hide();
@@ -2505,6 +2720,12 @@ els.settingsBack.addEventListener('click', () => void enterExplorer(state.curren
 els.settingsAutosync.addEventListener('change', () => {
   els.autosyncIntervalField.hidden = !els.settingsAutosync.checked;
 });
+// The theme is a client-only preference: apply and persist immediately,
+// without waiting for the settings "Save" button.
+els.settingsTheme.addEventListener('change', () => {
+  haptic('select');
+  setTheme(els.settingsTheme.value);
+});
 els.btnRepoAdd.addEventListener('click', () => {
   haptic('select');
   bindRepoForm(null);
@@ -2644,6 +2865,10 @@ document.addEventListener('language-changed', () => {
   if (!els.views.editor.hidden) {
     mainButton.show(STRINGS.saveBtnIdle, () => void saveCurrentNote());
   }
+  if (state.heatmapOk && !els.activityCard.hidden) {
+    renderActivityControls();
+    void loadActivityPeriod();
+  }
 });
 
 els.btnCreateNote.addEventListener('click', () => {
@@ -2752,6 +2977,10 @@ function initTelegram() {
 
 initTelegram();
 initI18n();
+// Re-apply the saved theme now that the DOM and the Telegram SDK are up:
+// the pre-paint snippet already set data-theme, this syncs the hljs
+// palettes for "auto" and the Telegram header/body chrome.
+applyTheme(getTheme());
 restartAutosyncTimer();
 void bootstrap();
 void refreshSyncBadge();

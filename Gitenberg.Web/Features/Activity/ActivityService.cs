@@ -38,14 +38,25 @@ public class ActivityService(AppDbContext dbContext)
             """);
     }
 
-    public async Task<List<ActivityDay>> GetHeatmapAsync(long telegramId, int? clientTzOffsetMinutes, int days = 371)
+    public async Task<List<ActivityDay>> GetHeatmapAsync(
+        long telegramId,
+        int? clientTzOffsetMinutes,
+        int days = 371,
+        DateOnly? from = null,
+        DateOnly? to = null
+    )
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
-        var todayLocal = DateTime.UtcNow.AddMinutes(-(clientTzOffsetMinutes ?? -180));
-        var startDay = todayLocal.AddDays(-(days - 1)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var todayLocal = DateOnly.FromDateTime(DateTime.UtcNow.AddMinutes(-(clientTzOffsetMinutes ?? -180)));
+        var startDay = (from ?? todayLocal.AddDays(-(days - 1))).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var endDay = (to ?? todayLocal).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         var rows = await dbContext.Database.SqlQuery<ActivityDayRow>(
-            $"SELECT ActivityDate AS Date, Count AS Count FROM ActivityDays WHERE TelegramUserId = {uid} AND ActivityDate >= {startDay} ORDER BY ActivityDate"
+            $"""
+            SELECT ActivityDate AS Date, Count AS Count FROM ActivityDays
+            WHERE TelegramUserId = {uid} AND ActivityDate >= {startDay} AND ActivityDate <= {endDay}
+            ORDER BY ActivityDate
+            """
         ).ToListAsync();
 
         return rows.Select(r => new ActivityDay(r.Date, r.Count)).ToList();

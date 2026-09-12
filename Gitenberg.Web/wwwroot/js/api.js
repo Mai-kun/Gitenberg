@@ -215,8 +215,10 @@ export function syncNow() {
   return request('POST', '/api/sync');
 }
 
-export function getActivityHeatmap() {
-  return request('GET', '/api/activity/heatmap');
+// from/to: optional 'YYYY-MM-DD' bounds; without them the backend returns the
+// last ~year of daily counts.
+export function getActivityHeatmap({ from, to } = {}) {
+  return request('GET', '/api/activity/heatmap', { params: { from, to } });
 }
 
 export function getTasks() {

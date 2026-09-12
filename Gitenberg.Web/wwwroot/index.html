@@ -12,8 +12,23 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css">
   <script src="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.js"></script>
 
-  <!-- highlight.js for code coloring in the preview (EasyMDE integration) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+  <!-- highlight.js for code coloring in the preview (EasyMDE integration);
+       one palette per surface, toggled by the theme (see js/theme.js) -->
+  <link id="hljs-theme-light" rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+  <link id="hljs-theme-dark" rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+  <script>
+    // Apply the saved theme before first paint (logic mirrored in js/theme.js).
+    (function () {
+      var id = localStorage.getItem('gitenberg.theme');
+      if (id !== 'light' && id !== 'dark' && id !== 'sepia' && id !== 'nord') return;
+      document.documentElement.dataset.theme = id;
+      var dark = id === 'dark' || id === 'nord';
+      var lightSheet = document.getElementById('hljs-theme-light');
+      var darkSheet = document.getElementById('hljs-theme-dark');
+      if (lightSheet) lightSheet.disabled = dark;
+      if (darkSheet) darkSheet.disabled = !dark;
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
 
   <link rel="stylesheet" href="css/app.css">
@@ -110,16 +125,22 @@
       </button>
     </nav>
 
-    <!-- Activity heatmap (GitHub contribution style), root level only -->
+    <!-- Activity statistics, root level only: week / month views -->
     <section id="activity-card" class="activity-card" hidden>
       <button id="activity-toggle" type="button" class="activity-toggle" aria-expanded="false">
         <span id="activity-summary" class="activity-summary"></span>
         <span id="activity-chevron" class="activity-chevron" aria-hidden="true">▾</span>
       </button>
       <div id="activity-body" class="activity-body" hidden>
-        <div id="heatmap-scroll" class="heatmap-scroll">
-          <div id="heatmap-grid" class="heatmap-grid"></div>
+        <div class="heatmap-controls">
+          <button id="heatmap-mode-week" type="button" class="filter-chip" data-i18n="activityPerWeek">За неделю</button>
+          <button id="heatmap-mode-month" type="button" class="filter-chip" data-i18n="activityPerMonth">За месяц</button>
+          <select id="heatmap-month" class="heatmap-select" aria-label="Месяц"></select>
+          <select id="heatmap-year" class="heatmap-select" aria-label="Год"></select>
+          <select id="heatmap-week" class="heatmap-select" aria-label="Неделя" hidden></select>
         </div>
+        <div id="heatmap-weekdays" class="heatmap-weekdays" aria-hidden="true"></div>
+        <div id="heatmap-grid" class="heatmap-grid"></div>
         <div class="heatmap-legend">
           <span data-i18n="activityLess">Меньше</span>
           <span class="heatmap-cell level-0"></span>
@@ -289,6 +310,19 @@
           </select>
         </div>
       </div>
+      <div class="settings-divider" aria-hidden="true"></div>
+      <h2 class="settings-section-title" data-i18n="appearanceTitle">Оформление</h2>
+      <div class="field">
+        <label for="settings-theme" data-i18n="themeLabel">Тема</label>
+        <select id="settings-theme" class="move-select">
+          <option value="auto" data-i18n="themeAuto">Как в Telegram</option>
+          <option value="light" data-i18n="themeLight">Светлая</option>
+          <option value="dark" data-i18n="themeDark">Тёмная</option>
+          <option value="sepia" data-i18n="themeSepia">Сепия</option>
+          <option value="nord" data-i18n="themeNord">Норд</option>
+        </select>
+      </div>
+      <p class="settings-hint" data-i18n="themeHint">Тема применяется сразу и запоминается автоматически. «Как в Telegram» повторяет цвета клиента Telegram.</p>
       <div class="settings-divider" aria-hidden="true"></div>
       <h2 class="settings-section-title" data-i18n="exportTitle">Экспорт хранилища</h2>
       <p class="settings-hint" data-i18n="exportHint">Скачайте ZIP-архив всего хранилища: все заметки и вложения из репозитория GitHub.</p>
