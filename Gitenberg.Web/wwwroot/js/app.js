@@ -129,6 +129,7 @@ const els = {
   regOwner: $('reg-owner'),
   regRepo: $('reg-repo'),
   regInboxPath: $('reg-inbox-path'),
+  regInboxSuggestions: $('reg-inbox-suggestions'),
   regAttachmentsPath: $('reg-attachments-path'),
   registerError: $('register-error'),
   registerSubmit: $('register-submit'),
@@ -208,6 +209,7 @@ const els = {
   settingsRepo: $('settings-repo'),
   settingsToken: $('settings-token'),
   settingsInboxPath: $('settings-inbox-path'),
+  settingsInboxSuggestions: $('settings-inbox-suggestions'),
   settingsAttachmentsPath: $('settings-attachments-path'),
   repoList: $('repo-list'),
   btnRepoAdd: $('btn-repo-add'),
@@ -256,6 +258,7 @@ const state = {
   historySeq: 0, // guards against out-of-order history responses
   sharePath: null, // note path shown in the share sheet
   shareToken: null, // active token of the share sheet (null after revoke)
+  folderSuggestions: { key: null, folders: [] }, // cached per owner/repo/token source
   currentTab: 'notes', // 'notes' | 'tasks' (root-level tab switch)
   tasks: [], // aggregated checklist from GET /api/notes/tasks
   tasksFilter: 'active', // 'active' | 'all'
@@ -426,6 +429,97 @@ els.registerForm.addEventListener('submit', async (event) => {
   } finally {
     setButtonBusy(els.registerSubmit, false, STRINGS.registerBtnBusy, STRINGS.registerBtnIdle);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Storage folder suggestions: tapping the "Папка для заметок" field offers
+// the repository's existing top-level folders as one-tap fills. Best-effort —
+// no token yet, wrong credentials or an empty repository simply keep the
+// "inbox" placeholder default.
+// ---------------------------------------------------------------------------
+
+function hideFolderSuggestions() {
+  els.regInboxSuggestions.hidden = true;
+  els.settingsInboxSuggestions.hidden = true;
+}
+
+function renderFolderSuggestions(container, input, folders) {
+  container.textContent = '';
+  if (!folders.length) {
+    container.hidden = true;
+    return;
+  }
+
+  for (const folder of folders) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'folder-chip';
+    chip.textContent = folder;
+    chip.addEventListener('click', () => {
+      input.value = folder;
+      container.hidden = true;
+      haptic('select');
+    });
+    container.append(chip);
+  }
+
+  container.hidden = false;
+}
+
+async function showFolderSuggestions(kind) {
+  const isRegister = kind === 'register';
+  const input = isRegister ? els.regInboxPath : els.settingsInboxPath;
+  const container = isRegister ? els.regInboxSuggestions : els.settingsInboxSuggestions;
+  const owner = (isRegister ? els.regOwner : els.settingsOwner).value.trim();
+  const repo = (isRegister ? els.regRepo : els.settingsRepo).value.trim();
+
+  let tokenSource;
+  if (isRegister) {
+    const token = els.regToken.value.trim();
+    if (!token || !owner || !repo) return;
+    tokenSource = { token };
+  } else {
+    // Settings: a newly typed token wins; editing a saved repository falls
+    // back to its stored token, a brand-new repository has no token yet.
+    if (!owner || !repo) return;
+    const typedToken = els.settingsToken.value.trim();
+    tokenSource = typedToken
+      ? { token: typedToken }
+      : (state.repoFormRepoId != null ? { repositoryId: state.repoFormRepoId } : null);
+    if (!tokenSource) return;
+  }
+
+  const key = `${owner}/${repo}|${tokenSource.token ?? `id:${tokenSource.repositoryId}`}`;
+  if (state.folderSuggestions.key === key) {
+    renderFolderSuggestions(container, input, state.folderSuggestions.folders);
+    return;
+  }
+
+  try {
+    const result = await api.listRepositoryFolders({
+      repositoryOwner: owner,
+      repositoryName: repo,
+      githubToken: tokenSource.token,
+      repositoryId: tokenSource.repositoryId,
+    });
+    const folders = Array.isArray(result?.folders) ? result.folders : [];
+    state.folderSuggestions = { key, folders };
+    renderFolderSuggestions(container, input, folders);
+  } catch {
+    // Suggestions are optional; the submit-time error handling covers real failures.
+  }
+}
+
+els.regInboxPath.addEventListener('focus', () => void showFolderSuggestions('register'));
+els.regInboxPath.addEventListener('click', () => void showFolderSuggestions('register'));
+els.settingsInboxPath.addEventListener('focus', () => void showFolderSuggestions('settings'));
+els.settingsInboxPath.addEventListener('click', () => void showFolderSuggestions('settings'));
+
+// A tap anywhere else closes the suggestion row (the chips are inside the
+// containers, so picking a folder still works).
+document.addEventListener('click', (event) => {
+  if (event.target.closest('.folder-suggestions, #reg-inbox-path, #settings-inbox-path')) return;
+  hideFolderSuggestions();
 });
 
 // ---------------------------------------------------------------------------
@@ -2305,6 +2399,7 @@ function bindRepoForm(repoId) {
   els.settingsInboxPath.value = repo?.inboxPath ?? 'inbox';
   els.settingsAttachmentsPath.value = repo?.attachmentsPath ?? 'inbox/attachments';
   els.repoFormActions.hidden = !repo;
+  hideFolderSuggestions();
 }
 
 // Activates another repository: drops all explorer/editor state that belongs

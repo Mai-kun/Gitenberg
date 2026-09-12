@@ -265,6 +265,20 @@ export function activateRepository(id) {
   return request('POST', `/api/repositories/${id}/activate`);
 }
 
+// Top-level folders of a repository — storage-folder suggestions for the
+// registration and settings forms. Either githubToken (typed into the form)
+// or repositoryId (stored token is used) must be provided.
+export function listRepositoryFolders({ repositoryOwner, repositoryName, githubToken, repositoryId }) {
+  return request('POST', '/api/repositories/folders', {
+    body: {
+      repositoryOwner,
+      repositoryName,
+      ...(githubToken ? { githubToken } : {}),
+      ...(repositoryId !== undefined && repositoryId !== null ? { repositoryId } : {}),
+    },
+  });
+}
+
 // Binary download — request() assumes JSON, so this is a separate code path.
 // Returns { blob, fileName } with the server-provided file name when present.
 export async function downloadExportArchive() {

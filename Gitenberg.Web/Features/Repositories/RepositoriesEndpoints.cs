@@ -5,7 +5,6 @@ using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
 namespace Gitenberg.Web.Features.Repositories;
 
 public static class RepositoriesEndpoints
@@ -37,6 +36,10 @@ public static class RepositoriesEndpoints
         group.MapPost("/{id}/activate", ActivateRepository)
              .WithName("ActivateRepository")
              .WithSummary("Switch the active repository");
+
+        group.MapPost("/folders", ListRepositoryFolders)
+             .WithName("ListRepositoryFolders")
+             .WithSummary("Top-level folders of a repository (storage folder suggestions)");
     }
 
     public static async Task<IResult> ListRepositories(
@@ -305,6 +308,75 @@ public static class RepositoriesEndpoints
         await dbContext.SaveChangesAsync();
 
         return Results.Ok(ToDto(repository, user.SelectedRepositoryId));
+    }
+
+    // Folder suggestions for the registration/settings forms: the top-level
+    // directories of the target repository ("inbox" stays the client default).
+    // The token comes either inline from the form (registration, or a newly
+    // typed token) or from the stored encrypted token of a saved repository.
+    public static async Task<IResult> ListRepositoryFolders(
+        [FromBody] RepositoryFoldersRequest? request,
+        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
+        [FromQuery(Name = "telegramId")] long? queryTelegramId,
+        AppDbContext dbContext,
+        ITokenEncryptionService encryptionService,
+        IGitHubService gitHubService,
+        HttpContext? httpContext = null
+    )
+    {
+        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
+        if (telegramId == null)
+        {
+            return Results.BadRequest(
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+        }
+
+        if (request == null)
+        {
+            return Results.BadRequest(new { Error = "Request body is required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.RepositoryOwner))
+        {
+            return Results.BadRequest(new { Error = "Repository owner is required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.RepositoryName))
+        {
+            return Results.BadRequest(new { Error = "Repository name is required." });
+        }
+
+        string? token;
+        if (!string.IsNullOrWhiteSpace(request.GitHubToken))
+        {
+            token = request.GitHubToken;
+        }
+        else if (request.RepositoryId != null)
+        {
+            var repository = await dbContext.Repositories
+                .FirstOrDefaultAsync(r => r.Id == request.RepositoryId && r.TelegramUserId == telegramId);
+            if (repository?.GitHubToken == null)
+            {
+                return Results.NotFound(new { Error = $"Repository {request.RepositoryId} not found." });
+            }
+
+            token = encryptionService.DecryptToken(repository.GitHubToken);
+        }
+        else
+        {
+            return Results.BadRequest(new { Error = "GitHub token is required." });
+        }
+
+        var context = new GitHubRepositoryContext(token, request.RepositoryOwner, request.RepositoryName);
+        var contents = await gitHubService.GetNotesAsync(context);
+
+        var folders = contents
+            .Where(item => item.Type == Octokit.ContentType.Dir && !item.Name.StartsWith("."))
+            .Select(item => item.Name)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return Results.Ok(new { Folders = folders });
     }
 
     private static object ToDto(Repository repository, int? selectedRepositoryId) => new

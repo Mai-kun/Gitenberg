@@ -19,6 +19,15 @@
   --radius-sm: 8px;
   --pad: 16px;
   --header-h: 52px;
+
+  /* Vertical rhythm scale. Compose layouts from these instead of ad-hoc
+     margins so blocks can be shown, hidden or reordered without ever
+     sticking together or drifting apart. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
 }
 
 * { box-sizing: border-box; }
@@ -61,6 +70,18 @@ button {
 input, textarea {
   font: inherit;
   color: var(--tg-text);
+}
+
+/* Native checkboxes pick up the Telegram accent color in both themes. */
+input[type="checkbox"] {
+  accent-color: var(--tg-button);
+}
+
+/* Keyboard navigation (desktop / Bluetooth keyboard): visible focus ring on
+   interactive elements, without painting rings on touch taps. */
+:focus-visible {
+  outline: 2px solid var(--tg-button);
+  outline-offset: 2px;
 }
 
 [hidden] { display: none !important; }
@@ -166,8 +187,9 @@ input, textarea {
 .label-row label { margin-bottom: 0; }
 
 .hint-btn {
-  width: 16px;
-  height: 16px;
+  position: relative;
+  width: 18px;
+  height: 18px;
   flex: none;
   border: 1px solid var(--tg-hint);
   border-radius: 50%;
@@ -179,6 +201,15 @@ input, textarea {
   align-items: center;
   justify-content: center;
   user-select: none;
+}
+
+/* The drawn circle is 18px — far below a comfortable finger target. An
+   invisible ::after extends the tappable area to ~40px without moving the
+   layout or enlarging the visual control. */
+.hint-btn::after {
+  content: "";
+  position: absolute;
+  inset: -11px;
 }
 
 .hint-btn:active { transform: scale(0.9); }
@@ -200,11 +231,36 @@ input, textarea {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
+/* Storage folder suggestions (registration & settings forms): one row of
+   existing repository folders, tap to fill the field. */
+.folder-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.folder-chip {
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--tg-section-sep);
+  border-radius: 999px;
+  background: var(--tg-secondary);
+  color: var(--tg-text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-chip:active { transform: scale(0.96); }
+
 .error-text {
   color: var(--tg-destructive);
   font-size: 14px;
   margin: 4px 0 12px;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .btn {
@@ -761,8 +817,9 @@ input, textarea {
   font-size: 14px;
 }
 
-/* Secondary buttons inside sheets stack vertically */
-.info-sheet .btn { margin-bottom: 10px; }
+/* Secondary buttons inside sheets stack vertically with the same rhythm
+   used across the app. */
+.info-sheet .btn { margin-bottom: var(--space-3); }
 .info-sheet .btn:last-child { margin-bottom: 0; }
 
 /* Share sheet: the public link of a note */
@@ -1271,43 +1328,79 @@ input, textarea {
    Settings, sync badge, front-matter, callouts, code highlighting
    ========================================================================== */
 
+/* The settings page is one flex column: vertical rhythm comes from the
+   container gap instead of per-element margins, so any block (button, error,
+   optional field) can be shown, hidden or reordered without blocks ever
+   sticking together — previously "Export" and "Save" had 0px between them. */
 .settings-body {
   padding: 4px var(--pad) 96px;
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+}
+
+.settings-body .field,
+.settings-body .error-text {
+  margin: 0; /* rhythm is owned by the .settings-body gap */
+}
+
+.settings-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tg-hint);
+  overflow-wrap: anywhere;
+}
+
+/* A hint explains the heading above it — sit it closer than the base gap. */
+.settings-body > .settings-hint {
+  margin-top: calc(-1 * var(--space-1));
+}
+
+.settings-section-title {
+  margin: var(--space-3) 0 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Action buttons get a full extra step of space above them. */
+.settings-body > .btn {
+  margin-top: var(--space-1);
+}
+
+/* The primary "Save" closes the page — separate it even more clearly. */
+.settings-body > .btn-primary {
+  margin-top: var(--space-2);
 }
 
 .settings-toggle {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px 0;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
   font-size: 14px;
   line-height: 1.4;
-  border-bottom: 1px solid var(--tg-section-sep);
-  margin-bottom: 12px;
 }
 
 .settings-toggle input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+/* Toggle + its hint + the conditional interval select: one grouped column. */
+.settings-toggle-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .settings-divider {
   height: 1px;
   background: var(--tg-section-sep);
-  margin: 4px 0 14px;
-}
-
-.settings-section-title {
-  margin: 0 0 6px;
-  font-size: 16px;
-}
-
-.export-btn {
-  align-self: stretch;
+  margin: var(--space-2) 0;
+  flex-shrink: 0;
 }
 
 .export-btn:disabled { opacity: 0.7; }
@@ -1726,22 +1819,21 @@ input, textarea {
 .repo-item-edit {
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  justify-content: center;
+  width: 44px; /* comfortable touch target for the pencil */
+  padding: 0;
   color: var(--tg-hint);
   border-left: 1px solid var(--tg-section-sep);
 }
 
 .repo-item-edit:active {
+  background: var(--tg-section-sep);
   color: var(--tg-text);
-}
-
-.repo-add-btn {
-  margin-top: 4px;
 }
 
 .repo-form-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-3);
   justify-content: space-between;
 }
 
