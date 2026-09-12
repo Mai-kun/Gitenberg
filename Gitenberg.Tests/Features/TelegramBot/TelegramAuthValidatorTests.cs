@@ -19,8 +19,9 @@ public class TelegramAuthValidatorTests
 
     /// <summary>
     /// Builds signed initData exactly the way Telegram signs it: URL-encode all values,
-    /// sort the remaining keys alphabetically and HMAC-SHA256 the data check string with
-    /// the WebAppData-derived secret key.
+    /// sort every field except 'hash' alphabetically (the 'signature' field, when
+    /// present, IS part of the data check string) and HMAC-SHA256 the data check string
+    /// with the WebAppData-derived secret key.
     /// </summary>
     private static string Sign(string botToken, string dataCheckString)
     {
@@ -57,10 +58,11 @@ public class TelegramAuthValidatorTests
             pairs.Add(new("signature", "dummy_signature_value"));
         }
 
+        // At this point 'pairs' holds every field except 'hash', and Telegram signs
+        // all of them — including 'signature' when present.
         var dataCheckString = string.Join(
             '\n',
             pairs
-                .Where(kv => kv.Key != "signature")
                 .OrderBy(kv => kv.Key, StringComparer.Ordinal)
                 .Select(kv => $"{kv.Key}={kv.Value}"));
 
@@ -99,6 +101,29 @@ public class TelegramAuthValidatorTests
         var result = _validator.Validate(initData);
 
         result.IsValid.Should().BeTrue();
+    }
+
+    // Regression (September 2026): Telegram includes the 'signature' field in the HMAC
+    // data-check-string; only 'hash' is excluded. A hash computed the old way (with
+    // 'signature' omitted) must be rejected — accepting it would mean re-introducing
+    // the bug where every real Mini App login failed with a hash mismatch.
+    [Fact]
+    public void Validate_WithHashSignedWithoutSignature_ReturnsFalse()
+    {
+        var authDate = ((long)DateTimeOffset.UtcNow.ToUnixTimeSeconds()).ToString();
+        var userJson = JsonSerializer.Serialize(new TelegramUser(12345, "Дима", null, "dima_test"));
+        var encodedUser = Uri.EscapeDataString(userJson);
+        const string queryId = "AAF9bE0aAAAAAHl1TYtSXfRb";
+
+        // Old algorithm: the check string skips the 'signature' field.
+        var staleCheckString = $"auth_date={authDate}\nquery_id={queryId}\nuser={encodedUser}";
+        var staleHash = Sign(TestBotToken, staleCheckString);
+        var initData = $"auth_date={authDate}&query_id={queryId}&signature=dummy_signature_value"
+            + $"&hash={staleHash}&user={encodedUser}";
+
+        var result = _validator.Validate(initData);
+
+        result.IsValid.Should().BeFalse();
     }
 
     [Fact]

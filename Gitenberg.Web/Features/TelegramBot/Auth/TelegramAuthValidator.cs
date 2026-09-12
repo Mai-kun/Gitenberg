@@ -30,10 +30,12 @@ public sealed class TelegramAuthValidator(
             return TelegramAuthResult.Invalid("Missing 'hash' parameter.");
         }
 
-        // Строка проверки по спецификации Telegram: все поля, кроме hash и signature,
-        // с '\n' в качестве разделителя. Канонический вариант — из декодированных
-        // значений (так делают официальный пример в доках и все библиотеки). Дополнительно
-        // строим вариант из сырых percent-encoded значений: если подпись сойдётся только
+        // Строка проверки по спецификации Telegram: все поля initData, кроме hash,
+        // отсортированные по алфавиту и разделённые '\n'. Поле signature в HMAC
+        // участвует — исключать его нельзя, иначе хеш не сходится с тем, что
+        // подписывает Telegram (проверено на реальном initData в сентябре 2026).
+        // Канонический вариант строится из декодированных значений; дополнительно
+        // пробуем сырые percent-encoded значения: если подпись сойдётся только
         // на нём, значит initData подписан в закодированном виде — fallback примет его.
         var dataCheckString = BuildCheckString(segments, raw: false);
         var rawCheckString = BuildCheckString(segments, raw: true);
@@ -156,7 +158,7 @@ public sealed class TelegramAuthValidator(
     private static string BuildCheckString(List<RawParameter> segments, bool raw)
     {
         var ordered = segments
-            .Where(p => raw ? p.RawKey != "hash" && p.RawKey != "signature" : p.Key != "hash" && p.Key != "signature")
+            .Where(p => raw ? p.RawKey != "hash" : p.Key != "hash")
             .OrderBy(p => raw ? p.RawKey : p.Key, StringComparer.Ordinal);
 
         return string.Join("\n", ordered.Select(p => raw ? $"{p.RawKey}={p.RawValue}" : $"{p.Key}={p.Value}"));
