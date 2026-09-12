@@ -7,10 +7,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Gitenberg.Web.Features.Pins;
 
-/// <summary>
-/// Pinned notes and folders of the active repository. Pins are per-user UI
-/// metadata stored in SQLite (not committed to GitHub), scoped per repository.
-/// </summary>
 public static class PinsEndpoints
 {
     public static void MapPinsEndpoints(this IEndpointRouteBuilder app)

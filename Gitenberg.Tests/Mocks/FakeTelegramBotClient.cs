@@ -10,10 +10,6 @@ using Telegram.Bot.Types;
 
 namespace Gitenberg.Tests.Mocks;
 
-/// <summary>
-/// Hand-rolled ITelegramBotClient fake: records outgoing messages, serves a
-/// configurable TGFile for GetFile and bytes for DownloadFile.
-/// </summary>
 public class FakeTelegramBotClient : ITelegramBotClient
 {
     public List<(long ChatId, string Text, string? ButtonText)> SentMessages { get; } = new();

@@ -13,11 +13,6 @@ using User = Gitenberg.Web.Models.User;
 
 namespace Gitenberg.Tests.Database;
 
-/// <summary>
-/// Multi-repo migration: legacy single-repo databases are seeded into the
-/// Repositories table, and the migration is idempotent (fresh EnsureCreated
-/// databases pass through unchanged).
-/// </summary>
 public class RepositoriesMigrationTests
 {
     private readonly TokenEncryptionService _encryptionService;
@@ -42,7 +37,6 @@ public class RepositoriesMigrationTests
         return dbContext;
     }
 
-    /// <summary>Legacy database: the Users table exists without the new columns.</summary>
     private static AppDbContext CreateLegacyDbContext(out SqliteConnection connection)
     {
         connection = new SqliteConnection("DataSource=:memory:");

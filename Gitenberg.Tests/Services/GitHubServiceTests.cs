@@ -8,10 +8,6 @@ using Xunit;
 
 namespace Gitenberg.Tests.Services;
 
-/// <summary>
-/// Offline unit tests for the version-history methods of GitHubService,
-/// routed through the FakeOctokitGitHubClient DispatchProxy.
-/// </summary>
 public class GitHubServiceTests
 {
     private readonly GitHubRepositoryContext _context = new("token", "owner", "repo");

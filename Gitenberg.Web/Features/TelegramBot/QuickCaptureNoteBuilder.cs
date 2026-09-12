@@ -3,16 +3,8 @@ using Telegram.Bot.Types.Enums;
 
 namespace Gitenberg.Web.Features.TelegramBot;
 
-/// <summary>
-/// Pure helpers for quick-capture notes: forward-source detection, relative
-/// image links and the markdown note template. Kept side-effect free for tests.
-/// </summary>
 public static class QuickCaptureNoteBuilder
 {
-    /// <summary>
-    /// Human-readable title of the original forwarded source, or null when the
-    /// message is not a forward.
-    /// </summary>
     public static string? GetForwardSource(Message message)
     {
         switch (message.ForwardOrigin)
@@ -51,10 +43,6 @@ public static class QuickCaptureNoteBuilder
         return fullName.Length > 0 ? fullName : user.Username;
     }
 
-    /// <summary>
-    /// Path of <paramref name="attachmentPath"/> relative to the note's folder,
-    /// using forward slashes so the link renders on GitHub and in Obsidian.
-    /// </summary>
     public static string GetRelativeImagePath(string notePath, string attachmentPath)
     {
         var noteSegments = notePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -78,10 +66,6 @@ public static class QuickCaptureNoteBuilder
         return up + relative;
     }
 
-    /// <summary>
-    /// Markdown body of a quick-capture note. The source quote and image line
-    /// are omitted when there is no forwarded source / photo.
-    /// </summary>
     public static string BuildNote(string text, string? source, string? relativeImagePath, DateTime timestamp)
     {
         var lines = new List<string>

@@ -69,10 +69,10 @@ public static class SearchEndpoints
         {
             await indexer.SynchronizeUserByIdAsync(telegramId.Value, repository.RepositoryId);
         }
-        catch (Exception ex)
+        catch
         {
             // A failed refresh must not break the search — query the current index.
-            Console.Error.WriteLine($"Search index refresh failed for user {telegramId}: {ex.Message}");
+            // NoteIndexer logs the underlying failure; freshness is best-effort.
         }
 
         var matchExpression = FtsQueryBuilder.Build(query);

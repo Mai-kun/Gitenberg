@@ -134,9 +134,6 @@ public static class SyncEndpoints
     }
 }
 
-/// <summary>
-/// Periodically flushes pending local changes to GitHub.
-/// </summary>
 public class SyncFlushService(
     IServiceScopeFactory scopeFactory,
     IOptions<SyncConfiguration> options,
@@ -235,6 +232,5 @@ public class SyncConfiguration
 {
     public const string SectionName = "Sync";
 
-    /// <summary>How often pending local changes are pushed to GitHub (minutes).</summary>
     public int FlushIntervalMinutes { get; set; } = 5;
 }

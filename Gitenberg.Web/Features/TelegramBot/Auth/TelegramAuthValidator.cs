@@ -50,19 +50,9 @@ public sealed class TelegramAuthValidator(
         var decodedHashBytes = HMACSHA256.HashData(secretKey, Encoding.UTF8.GetBytes(dataCheckString));
         var rawHashBytes = HMACSHA256.HashData(secretKey, Encoding.UTF8.GetBytes(rawCheckString));
 
-        // Временная расширенная диагностика: сырой initData и оба варианта строки проверки
-        // позволяют по консоли хостинга найти точную причину расхождения хэшей.
-        var botId = cleanToken.Split(':', 2)[0];
-        var tokenFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cleanToken)))[..8].ToLowerInvariant();
-
-        logger.LogInformation("--- TELEGRAM AUTH VALIDATION ---");
-        logger.LogInformation("Raw initData:\n{RawInitData}", initData);
-        logger.LogInformation("DataCheckString (decoded):\n{DataCheckString}", dataCheckString);
-        logger.LogInformation("DataCheckString (raw):\n{RawCheckString}", rawCheckString);
-        logger.LogInformation("Received Hash: {ReceivedHash}", receivedHash);
-        logger.LogInformation("Computed Hash (decoded): {ComputedHash}", Convert.ToHexString(decodedHashBytes).ToLowerInvariant());
-        logger.LogInformation("Computed Hash (raw): {ComputedHash}", Convert.ToHexString(rawHashBytes).ToLowerInvariant());
-        logger.LogInformation("Bot token: botId={BotId}, length={Length}, sha256={Fingerprint}", botId, cleanToken.Length, tokenFingerprint);
+        // Never log initData or the check strings: they stay valid as
+        // credentials for MaxInitDataAge, so a leaked log entry is a replayable
+        // login for that user.
 
         byte[] receivedHashBytes;
         try
@@ -179,8 +169,9 @@ public sealed class TelegramAuthValidator(
         return false;
     }
 
-    // Огненно-забытая проба: диагностический запрос не должен задерживать 401-ответ
-    // и не должен уронить обработку запроса при сетевой ошибке.
+    // Проба выполняется по принципу fire-and-forget: диагностический запрос
+    // не должен задерживать 401-ответ и не должен уронить обработку запроса
+    // при сетевой ошибке.
     private void ProbeTokenBot()
     {
         if (httpClientFactory is null)

@@ -10,13 +10,6 @@ using Octokit;
 
 namespace Gitenberg.Web.Features.Shares;
 
-/// <summary>
-/// Public share links ("Share Web View"): a note gets a persistent token URL
-/// that renders its Markdown read-only for anyone — no GitHub access needed.
-/// Management lives under /api/notes/share behind Telegram auth; the token URL
-/// itself and its content endpoint are intentionally unauthenticated — the
-/// 128-bit random token is the only credential, and it can be revoked.
-/// </summary>
 public static class ShareEndpoints
 {
     public static void MapShareEndpoints(this IEndpointRouteBuilder app)

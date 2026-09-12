@@ -66,17 +66,6 @@ function writeBoardToSource(boardMarkdown) {
     cm.focus();
 }
 
-function showBoardToast(message) {
-    const toast = document.getElementById('toast');
-    if (!toast) return;
-    toast.textContent = message;
-    toast.hidden = false;
-    clearTimeout(showBoardToast._timer);
-    showBoardToast._timer = setTimeout(() => {
-        toast.hidden = true;
-    }, 1800);
-}
-
 // --- Kanban card modal state ---
 const kanbanModal = {
     colIndex: null, // target column for new cards

@@ -3,11 +3,6 @@ using System.Text;
 
 namespace Gitenberg.Web.Features.TelegramBot;
 
-/// <summary>
-/// Creates and validates short-lived HMAC-signed links used by inline search
-/// results so a note file can be downloaded without exposing the user's
-/// GitHub token or leaving the endpoint open to anyone.
-/// </summary>
 public class InlineFileLinkService(BotConfiguration botConfig)
 {
     public const int LifetimeMinutes = 60;
@@ -33,7 +28,6 @@ public class InlineFileLinkService(BotConfiguration botConfig)
         return Convert.ToHexString(hash);
     }
 
-    /// <summary>Builds a signed download URL valid for <see cref="LifetimeMinutes"/>.</summary>
     public string BuildFileUrl(long telegramId, string notePath, string format, string hostAddress)
     {
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(LifetimeMinutes).ToUnixTimeSeconds();

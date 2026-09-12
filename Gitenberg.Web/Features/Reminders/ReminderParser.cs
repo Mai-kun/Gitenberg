@@ -5,13 +5,6 @@ namespace Gitenberg.Web.Features.Reminders;
 
 public record ReminderParseResult(DateTime? FireAtUtc, string Text, string? Error);
 
-/// <summary>
-/// Parses the whole tail after "@remind" or "/remind": "when [text]".
-/// Two-token "date time" is tried before a single token, so
-/// "2026-09-10 15:00 Купить молоко" never loses its time into the text.
-/// Absolute times are interpreted in the server's local time zone and
-/// returned as UTC.
-/// </summary>
 public static partial class ReminderParser
 {
     private static readonly string[] DateTimeFormats = ["yyyy-MM-dd HH:mm", "dd.MM.yyyy HH:mm"];
@@ -78,8 +71,12 @@ public static partial class ReminderParser
 
         if (DateTime.TryParseExact(single, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timeOnly))
         {
-            var local = DateTime.Today + timeOnly.TimeOfDay;
-            if (local <= nowUtc.ToLocalTime())
+            // "Today" must derive from nowUtc (the injected clock), not from
+            // DateTime.Today: otherwise the today/tomorrow decision uses the
+            // real server date while the comparison uses the injected one.
+            var nowLocal = nowUtc.ToLocalTime();
+            var local = nowLocal.Date + timeOnly.TimeOfDay;
+            if (local <= nowLocal)
             {
                 local = local.AddDays(1);
             }

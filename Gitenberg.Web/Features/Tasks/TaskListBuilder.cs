@@ -4,12 +4,6 @@ namespace Gitenberg.Web.Features.Tasks;
 
 public sealed record NoteTask(string NotePath, string NoteName, int Line, int OccurrenceIndex, string Text, bool Checked);
 
-/// <summary>
-/// Extracts markdown task-list items ("- [ ]", "- [x]", "*", "+" and ordered
-/// list checkboxes) from a note. Lines inside ``` / ~~~ code fences are
-/// skipped. OccurrenceIndex is the 0-based ordinal of the checkbox within the
-/// whole note and is the stable handle the frontend flips.
-/// </summary>
 public static partial class TaskListBuilder
 {
     [GeneratedRegex(@"^\s*(?:[-*+]|\d+[.)])\s+\[([ xX])\]\s*(.*)$")]

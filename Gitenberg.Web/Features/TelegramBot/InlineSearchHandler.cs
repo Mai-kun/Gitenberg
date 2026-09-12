@@ -14,11 +14,6 @@ using User = Gitenberg.Web.Models.User;
 
 namespace Gitenberg.Web.Features.TelegramBot;
 
-/// <summary>
-/// Answers Telegram inline queries (typing "@bot query" in any chat) with
-/// FTS5 search results from the user's notes. Choosing a result sends the
-/// note text into the chat; a signed URL button downloads the note as a file.
-/// </summary>
 public class InlineSearchHandler(
     ITelegramBotClient botClient,
     AppDbContext dbContext,
@@ -133,14 +128,9 @@ public class InlineSearchHandler(
         return hits.SelectMany(hit => BuildResultsForNote(user, repository, hit)).ToList();
     }
 
-    /// <summary>
-    /// Two results per note: choosing the article sends the note text into
-    /// the chat, choosing the document makes Telegram fetch the note as a
-    /// file and deliver it as a document message.
-    /// </summary>
     private IEnumerable<InlineQueryResult> BuildResultsForNote(User user, ResolvedRepository repository, InlineNoteHit hit)
     {
-        yield return BuildNoteArticle(user, repository, hit);
+        yield return BuildNoteArticle(repository, hit);
 
         var document = BuildNoteDocument(user, repository, hit);
         if (document != null)
@@ -149,7 +139,7 @@ public class InlineSearchHandler(
         }
     }
 
-    private InlineQueryResultArticle BuildNoteArticle(User user, ResolvedRepository repository, InlineNoteHit hit)
+    private InlineQueryResultArticle BuildNoteArticle(ResolvedRepository repository, InlineNoteHit hit)
     {
         // The index stores "path\ncontent"; the note body starts after the path line.
         var content = hit.Content;
@@ -218,7 +208,6 @@ public class InlineSearchHandler(
         return new InlineKeyboardMarkup(InlineKeyboardButton.WithUrl("Открыть на GitHub", githubUrl));
     }
 
-    /// <summary>Stable, unique result id: a hex SHA-256 of the kind and path (64 chars, the API maximum).</summary>
     private static string ResultId(string kind, string notePath) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{kind}:{notePath}")));
 

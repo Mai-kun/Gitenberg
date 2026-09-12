@@ -6,11 +6,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Gitenberg.Web.Services;
 
-/// <summary>
-/// Central resolution of "which GitHub repository does this user work with":
-/// every GitHub call site goes through here instead of building a
-/// GitHubRepositoryContext from the legacy user columns.
-/// </summary>
 public class RepositoryContextResolver(
     AppDbContext dbContext,
     ITokenEncryptionService encryptionService,

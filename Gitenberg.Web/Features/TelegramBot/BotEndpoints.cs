@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Models;
@@ -23,7 +24,13 @@ public static class BotEndpoints
             BotConfiguration botConfig,
             CancellationToken cancellationToken) =>
         {
-            if (string.IsNullOrEmpty(botConfig.SecretToken) || botConfig.SecretToken != secretToken)
+            // Constant-time comparison: the same secret also signs inline file
+            // links, so it must not leak through timing.
+            if (string.IsNullOrEmpty(botConfig.SecretToken)
+                || secretToken is null
+                || !CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(botConfig.SecretToken),
+                    Encoding.UTF8.GetBytes(secretToken)))
             {
                 return Results.Unauthorized();
             }
@@ -71,6 +78,12 @@ public static class BotEndpoints
             }
 
             var content = await gitHubService.GetNoteContentAsync(repository.Context, path);
+            if (content is null)
+            {
+                // GitHub omits content only for files larger than 1 MB — the
+                // inline link cannot deliver them as a document.
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
 
             if (fileFormat == InlineFileLinkService.ZipFormat)
             {

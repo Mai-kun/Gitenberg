@@ -6,12 +6,6 @@ namespace Gitenberg.Web.Features.Activity;
 
 public sealed record ActivityDay(string Date, int Count);
 
-/// <summary>
-/// Daily note-activity counters feeding the GitHub-style heatmap on the Mini
-/// App home screen. Events are counted at write time (save/delete/move in the
-/// app and quick capture via the bot), not at commit time, so pending
-/// local-first changes are visible immediately.
-/// </summary>
 public class ActivityService(AppDbContext dbContext)
 {
     public static void EnsureTableCreated(AppDbContext db)
@@ -26,12 +20,6 @@ public class ActivityService(AppDbContext dbContext)
             """);
     }
 
-    /// <summary>
-    /// Local day key (yyyy-MM-dd) for an event. Browsers report
-    /// Date.getTimezoneOffset() semantics (UTC+3 → -180), so the client value
-    /// is negated. Without a browser context (bot quick capture) the RU-user
-    /// fallback of UTC+3 is used.
-    /// </summary>
     public static string ResolveDayKey(int? clientTzOffsetMinutes, DateTime? utcNow = null)
     {
         var offsetMinutes = clientTzOffsetMinutes ?? -180;
@@ -50,10 +38,6 @@ public class ActivityService(AppDbContext dbContext)
             """);
     }
 
-    /// <summary>
-    /// Non-zero days inside the heatmap window (the client fills empty days),
-    /// oldest first.
-    /// </summary>
     public async Task<List<ActivityDay>> GetHeatmapAsync(long telegramId, int? clientTzOffsetMinutes, int days = 371)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);

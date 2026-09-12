@@ -10,11 +10,6 @@ using Repository = Gitenberg.Web.Models.Repository;
 
 namespace Gitenberg.Web.Features.Search;
 
-/// <summary>
-/// Synchronizes the local FTS5 note index with every GitHub repository of
-/// every registered user. Only notes whose SHA changed since the last run are
-/// downloaded, keeping GitHub API usage minimal.
-/// </summary>
 public class NoteIndexer(
     AppDbContext dbContext,
     IGitHubService gitHubService,
@@ -34,13 +29,6 @@ public class NoteIndexer(
         }
     }
 
-    /// <summary>
-    /// Incremental re-index of a single user's notes. Cheap when nothing
-    /// changed (one listing; only notes with a new SHA are downloaded), so
-    /// search endpoints can call it right before querying to guarantee
-    /// fresh results. With <paramref name="repositoryId"/> only that
-    /// repository is refreshed; otherwise all of the user's repositories are.
-    /// </summary>
     public async Task SynchronizeUserByIdAsync(long telegramId, int? repositoryId = null, CancellationToken cancellationToken = default)
     {
         var userExists = await dbContext.Users.AnyAsync(u => u.TelegramId == telegramId, cancellationToken);

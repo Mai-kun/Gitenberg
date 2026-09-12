@@ -215,28 +215,12 @@ export function syncNow() {
   return request('POST', '/api/sync');
 }
 
-export function getSettings() {
-  return request('GET', '/api/register');
-}
-
 export function getActivityHeatmap() {
   return request('GET', '/api/activity/heatmap');
 }
 
 export function getTasks() {
   return request('GET', '/api/notes/tasks');
-}
-
-export function saveSettings({ githubToken, repositoryOwner, repositoryName, inboxPath, attachmentsPath }) {
-  return request('POST', '/api/register', {
-    body: {
-      ...(githubToken ? { githubToken } : {}),
-      repositoryOwner,
-      repositoryName,
-      ...(inboxPath ? { inboxPath } : {}),
-      ...(attachmentsPath ? { attachmentsPath } : {}),
-    },
-  });
 }
 
 // ---------------------------------------------------------------------------

@@ -2,14 +2,6 @@ using System.Text;
 
 namespace Gitenberg.Web.Features.Reminders;
 
-/// <summary>
-/// Builds t.me deep links that open the Mini App on a specific note via the
-/// startapp parameter (Base64Url of "note:&lt;repoId&gt;:&lt;path&gt;"). The
-/// repository id lets the Mini App switch repositories before opening the
-/// note; payloads without it (legacy) resolve to the active repository.
-/// Telegram limits startapp to 64 chars of [A-Za-z0-9_-]; longer note paths
-/// yield no URL and the caller falls back to the plain WebApp button.
-/// </summary>
 public static class DeepLinkBuilder
 {
     public const int MaxPayloadLength = 64;

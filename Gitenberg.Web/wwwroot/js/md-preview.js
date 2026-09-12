@@ -258,7 +258,7 @@ export function renderMarkdownPipeline(text, markdownFn, { dataview = true } = {
   // Whole-file kanban via frontmatter (Obsidian Kanban plugin format).
   const frontBoard = extractFrontmatterBoard(text);
   if (frontBoard !== null) {
-    return { html: renderKanbanHtml(frontBoard), boardType: 'frontmatter' };
+    return { html: sanitizePreviewHtml(renderKanbanHtml(frontBoard)), boardType: 'frontmatter' };
   }
 
   // Regular YAML frontmatter → metadata card; the rest renders normally.
@@ -284,5 +284,90 @@ export function renderMarkdownPipeline(text, markdownFn, { dataview = true } = {
   html = html.replace(/(?:<p>)?@@KANBAN_BLOCK_(\d+)@@(?:<\/p>)?/g, (_, i) =>
     renderKanbanHtml(kanbanBlocks[Number(i)]));
 
-  return { html: frontMatterHtml + html, boardType: kanbanBlocks.length ? 'fenced' : null };
+  return { html: sanitizePreviewHtml(frontMatterHtml + html), boardType: kanbanBlocks.length ? 'fenced' : null };
+}
+
+// ---------------------------------------------------------------------------
+// HTML sanitizer for rendered previews
+// ---------------------------------------------------------------------------
+
+// Raw HTML inside a note must never become live markup: a note can carry
+// third-party text (forwarded messages), and the public share page renders it
+// for strangers — an <img src=x onerror=…> would execute in any visitor's
+// browser and inside the Mini App too. An allowlist keeps everything this
+// pipeline itself generates (wiki-links, tag chips, callouts, kanban cards,
+// dataview blocks, tables, task-list checkboxes); unknown tags are unwrapped,
+// script-bearing tags are dropped with their content, and href/src may not
+// use script schemes.
+const SANITIZE_ALLOWED_TAGS = new Set([
+  'p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+  'em', 'strong', 'b', 'i', 's', 'del', 'u', 'sup', 'sub', 'kbd', 'mark',
+  'a', 'img', 'span', 'div', 'dl', 'dt', 'dd',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+  'input', 'button',
+]);
+const SANITIZE_DROP_WITH_CONTENT = new Set([
+  'script', 'style', 'iframe', 'object', 'embed', 'noscript', 'template',
+  'svg', 'math', 'form', 'base', 'meta', 'link', 'title', 'head',
+]);
+const SANITIZE_ALLOWED_ATTRS = new Set([
+  'href', 'src', 'alt', 'title', 'class', 'align', 'colspan', 'rowspan',
+  'start', 'type', 'checked', 'disabled', 'loading', 'draggable',
+]);
+const SANITIZE_URL_ATTRS = new Set(['href', 'src']);
+
+function isSafeUrl(value, isImage) {
+  // Whitespace inside the scheme ("java\tscript:…") must not slip through —
+  // compare on a stripped copy. Entities are already decoded by DOMParser.
+  const normalized = String(value).trim().toLowerCase().replace(/\s+/g, '');
+  if (/^(javascript|vbscript):/.test(normalized)) return false;
+  if (normalized.startsWith('data:')) return isImage && normalized.startsWith('data:image/');
+  return true;
+}
+
+export function sanitizePreviewHtml(html) {
+  // Parsed documents are detached: nothing executes or loads during the walk.
+  const doc = new DOMParser().parseFromString(String(html ?? ''), 'text/html');
+  sanitizeNode(doc.body);
+  return doc.body.innerHTML;
+}
+
+function sanitizeNode(root) {
+  for (const node of [...root.childNodes]) {
+    if (node.nodeType === Node.COMMENT_NODE) {
+      node.remove();
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+    const tag = node.tagName.toLowerCase();
+    if (SANITIZE_DROP_WITH_CONTENT.has(tag)) {
+      node.remove();
+      continue;
+    }
+    if (!SANITIZE_ALLOWED_TAGS.has(tag)) {
+      // Harmless unknown tag — keep its content, drop the wrapper.
+      sanitizeNode(node);
+      node.replaceWith(...node.childNodes);
+      continue;
+    }
+
+    for (const attr of [...node.attributes]) {
+      const name = attr.name.toLowerCase();
+      if (!SANITIZE_ALLOWED_ATTRS.has(name) && !name.startsWith('data-')) {
+        node.removeAttribute(attr.name);
+        continue;
+      }
+      if (SANITIZE_URL_ATTRS.has(name) && !isSafeUrl(attr.value, tag === 'img')) {
+        node.removeAttribute(attr.name);
+      }
+    }
+    if (tag === 'input') {
+      // Only task-list checkboxes make sense in a note: neutralize anything else.
+      node.setAttribute('type', 'checkbox');
+      node.setAttribute('disabled', '');
+    }
+    sanitizeNode(node);
+  }
 }

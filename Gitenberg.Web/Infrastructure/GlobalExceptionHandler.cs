@@ -41,6 +41,13 @@ public class GlobalExceptionHandler(IProblemDetailsService problemDetailsService
 
         httpContext.Response.StatusCode = statusCode;
 
+        // Expected client errors keep their message; an unmapped (500) failure
+        // must not leak internals — stack paths, crypto/keyset details, GitHub
+        // API responses — so it gets a generic detail instead.
+        var detail = statusCode == StatusCodes.Status500InternalServerError
+            ? "An unexpected error occurred. Please try again later."
+            : exception.Message;
+
         return await problemDetailsService.TryWriteAsync(
             new ProblemDetailsContext
             {
@@ -50,7 +57,7 @@ public class GlobalExceptionHandler(IProblemDetailsService problemDetailsService
                 {
                     Status = statusCode,
                     Title = title,
-                    Detail = exception.Message,
+                    Detail = detail,
                     Instance = httpContext.Request.Path,
                 },
             }

@@ -39,16 +39,6 @@ function haptic(type, ...args) {
   }
 }
 
-// Russian plural: plural(1, 'элемент', 'элемента', 'элементов') → 'элемент'.
-function plural(n, one, few, many) {
-  const mod100 = Math.abs(n) % 100;
-  const mod10 = mod100 % 10;
-  if (mod100 >= 11 && mod100 <= 14) return many;
-  if (mod10 === 1) return one;
-  if (mod10 >= 2 && mod10 <= 4) return few;
-  return many;
-}
-
 // True when the page runs inside a real Telegram client. Outside Telegram
 // the SDK stub reports platform 'unknown' and renders no MainButton, so
 // in-page fallback controls must stay visible there.
@@ -149,7 +139,6 @@ const els = {
   searchInput: $('search-input'),
   searchClear: $('search-clear'),
   searchFind: $('search-find'),
-  searchResults: $('search-results'),
   notesList: $('notes-list'),
   explorerStatus: $('explorer-status'),
   editorTitle: $('editor-title'),
@@ -569,7 +558,14 @@ function renderNotes(items, pinnedPaths = new Set()) {
     }
     const meta = document.createElement('span');
     meta.className = 'note-meta';
-    meta.textContent = isDir ? 'Папка' : formatSize(item.size);
+    if (isDir) {
+      // The counter loader below replaces the label via the dataset flag,
+      // so the marker must not depend on the current language.
+      meta.dataset.folder = '1';
+      meta.textContent = STRINGS.infoTypeFolder;
+    } else {
+      meta.textContent = formatSize(item.size);
+    }
     body.append(name, meta);
 
     row.append(icon, body);
@@ -577,8 +573,8 @@ function renderNotes(items, pinnedPaths = new Set()) {
     const info = document.createElement('span');
     info.className = 'note-info';
     info.setAttribute('role', 'button');
-    info.setAttribute('aria-label', `Свойства ${item.name}`);
-    info.title = 'Свойства';
+    info.setAttribute('aria-label', `${t('infoTitle')}: ${item.name}`);
+    info.title = t('infoTitle');
     info.innerHTML = KEBAB_ICON;
     info.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -589,8 +585,8 @@ function renderNotes(items, pinnedPaths = new Set()) {
     const del = document.createElement('span');
     del.className = 'note-delete';
     del.setAttribute('role', 'button');
-    del.setAttribute('aria-label', `Удалить ${item.name}`);
-    del.title = 'Удалить';
+    del.setAttribute('aria-label', `${t('deleteAction')}: ${item.name}`);
+    del.title = t('deleteAction');
     del.innerHTML = TRASH_ICON;
     del.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -608,7 +604,9 @@ function renderNotes(items, pinnedPaths = new Set()) {
     } else {
       // Non-markdown files are opened on GitHub instead of the editor.
       row.addEventListener('click', () => {
-        if (item.htmlUrl) tg()?.openLink?.(item.htmlUrl);
+        if (!item.htmlUrl) return;
+        if (isTelegramClient()) tg()?.openLink?.(item.htmlUrl);
+        else window.open(item.htmlUrl, '_blank', 'noopener');
       });
     }
 
@@ -631,7 +629,8 @@ async function loadFolderItemCounts(dirs) {
     const count = Array.isArray(children) ? children.length : 0;
     const row = els.notesList.querySelector(`.note-row[data-path="${CSS.escape(item.path)}"]`);
     const meta = row?.querySelector('.note-meta');
-    if (meta && meta.textContent === 'Папка') {
+    if (meta && meta.dataset.folder === '1') {
+      delete meta.dataset.folder;
       meta.textContent = STRINGS.folderItemsCount(count);
     }
   }));
@@ -639,9 +638,9 @@ async function loadFolderItemCounts(dirs) {
 
 function formatSize(size) {
   const n = Number(size) || 0;
-  if (n < 1024) return `${n} Б`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} КБ`;
-  return `${(n / (1024 * 1024)).toFixed(1)} МБ`;
+  if (n < 1024) return `${n} ${STRINGS.unitBytes}`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} ${STRINGS.unitKb}`;
+  return `${(n / (1024 * 1024)).toFixed(1)} ${STRINGS.unitMb}`;
 }
 
 async function loadFolder(path) {
@@ -694,6 +693,11 @@ function updateBackButton() {
 function handleBackNavigation() {
   if (!els.views.editor.hidden) {
     void leaveEditor();
+    return;
+  }
+  if (!els.views.settings.hidden) {
+    // Same behavior as the in-page settings back arrow.
+    void enterExplorer(state.currentPath);
     return;
   }
   if (state.currentPath !== '') {
@@ -1076,8 +1080,6 @@ function noteTargetFromStartParam() {
 // ---------------------------------------------------------------------------
 
 function hideSearchResults() {
-  els.searchResults.hidden = true;
-  els.searchResults.textContent = '';
   els.searchModal.hidden = true;
   els.searchModalResults.textContent = '';
 }
@@ -1358,6 +1360,15 @@ function resetEditorDraft() {
   els.previewBanner.hidden = true;
 }
 
+// Navigating away through preview links (#tags / [[wikilinks]]) must not
+// silently drop unsaved edits — apply the same confirm as the Back button.
+async function confirmLeaveEditorIfDirty() {
+  if (els.views.editor.hidden || !isEditorDirty()) return true;
+  const ok = await showConfirm(STRINGS.confirmDiscard);
+  if (ok) resetEditorDraft();
+  return ok;
+}
+
 function validateNotePath(rawPath) {
   const path = normPath(rawPath);
   if (!path || path.endsWith('/')) return null;
@@ -1365,10 +1376,31 @@ function validateNotePath(rawPath) {
   return path;
 }
 
+// A queued local-first save becomes a GitHub UpdateFile, so writing to a path
+// that was not loaded from may silently overwrite an existing note. Probe the
+// target and ask before clobbering it; 404 (missing, or locally pending-deleted)
+// means the path is free. Uninterpretable errors keep the confirm shown —
+// asking twice is cheaper than losing a note.
+async function confirmOverwriteIfNeeded(path) {
+  let exists = true;
+  try {
+    await api.getNoteContent(path);
+  } catch (error) {
+    exists = !(error instanceof api.ApiError && error.status === 404);
+  }
+  return !exists || showConfirm(STRINGS.confirmOverwrite(path));
+}
+
 async function saveCurrentNote() {
   const path = validateNotePath(els.notePath.value);
   if (!path) {
     setError(els.editorStatus, STRINGS.invalidPath);
+    haptic('error');
+    return;
+  }
+
+  const overwrites = state.editor.mode === 'create' || path !== state.editor.path;
+  if (overwrites && !(await confirmOverwriteIfNeeded(path))) {
     haptic('error');
     return;
   }
@@ -1398,6 +1430,10 @@ async function saveCurrentNote() {
     state.editor.mode = 'edit';
     state.editor.path = path;
     els.notePath.value = path;
+    // The note exists now, so the header actions hidden for a new draft
+    // (delete, share) become available without reopening the note.
+    els.btnEditorDelete.hidden = false;
+    els.btnEditorShare.hidden = false;
     const folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
     state.currentPath = folder;
     await enterExplorer(folder);
@@ -1911,6 +1947,10 @@ async function submitMove() {
     return;
   }
 
+  // Moving onto an existing note overwrites it (an existing folder would be
+  // merged into) — ask before clobbering.
+  if (!(await confirmOverwriteIfNeeded(toPath))) return;
+
   try {
     await api.moveNote(fromPath, toPath);
     haptic('success');
@@ -1968,7 +2008,6 @@ document.addEventListener('keydown', (event) => {
 let linkPickerSeq = 0;
 
 async function openLinkPicker() {
-  state.linkTargetDir = state.currentPath;
   els.linkUrl.value = '';
   setError(els.linkError, '');
   els.linkSearch.value = '';
@@ -2060,8 +2099,10 @@ document.addEventListener('link-picker-open', () => {
 document.addEventListener('tag-click', async (event) => {
   const tag = String(event.detail?.tag || '').trim();
   if (!tag) return;
+  if (!(await confirmLeaveEditorIfDirty())) return;
   mainButton.hide();
   showView('explorer');
+  updateBackButton();
   els.searchInput.value = `#${tag}`;
   els.searchFind.hidden = false;
   await runSearch(`#${tag}`);
@@ -2081,6 +2122,8 @@ document.addEventListener('wiki-open', async (event) => {
   for (const candidate of candidates) {
     try {
       await api.getNoteContent(candidate);
+      // Confirm only once the target exists, so a miss keeps the draft intact.
+      if (!(await confirmLeaveEditorIfDirty())) return;
       openEditor('edit', candidate);
       return;
     } catch (error) {
@@ -2093,6 +2136,7 @@ document.addEventListener('wiki-open', async (event) => {
 
   const vaultPath = await searchVaultForNote(raw);
   if (vaultPath) {
+    if (!(await confirmLeaveEditorIfDirty())) return;
     openEditor('edit', vaultPath);
   } else {
     showToast(STRINGS.noteNotFound(raw));
@@ -2437,11 +2481,13 @@ async function exportArchive() {
 
 els.btnExport.addEventListener('click', () => void exportArchive());
 
-let syncBadgeTimer = null;
 async function refreshSyncBadge() {
   try {
     const { pending } = await api.syncStatus();
+    // The button stays hidden until there is something to sync: with no
+    // pending local changes a manual flush has nothing to do anyway.
     els.syncBadge.hidden = pending === 0;
+    els.btnSync.hidden = pending === 0;
     els.syncBadge.textContent = String(pending);
     els.syncBadge.title = t('syncPendingHint');
   } catch {

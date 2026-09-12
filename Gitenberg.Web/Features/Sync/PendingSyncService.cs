@@ -12,13 +12,6 @@ namespace Gitenberg.Web.Features.Sync;
 
 public record PendingOp(long Id, string Kind, string FromPath, string? ToPath, string? Content, DateTime CreatedAt, string? CommitMessage = null);
 
-/// <summary>
-/// Local-first write queue: saves, deletes and moves are stored in SQLite and
-/// flushed to GitHub either by the background timer or on demand. Read paths
-/// (listings and note content) apply pending ops as an overlay so the UI is
-/// always consistent with the local state. Ops belong to one repository:
-/// switching the active repository never mixes queues.
-/// </summary>
 public class PendingSyncService(AppDbContext dbContext)
 {
     public static void EnsureTableCreated(AppDbContext db)
@@ -86,7 +79,6 @@ public class PendingSyncService(AppDbContext dbContext)
         ).SingleAsync();
     }
 
-    /// <summary>Total pending ops across all of the user's repositories.</summary>
     public async Task<int> GetPendingCountAllReposAsync(long telegramId)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
@@ -103,12 +95,6 @@ public class PendingSyncService(AppDbContext dbContext)
 
     private sealed record PendingOpRow(long Id, string Kind, string FromPath, string? ToPath, string? Content, string? CommitMessage, string CreatedAt);
 
-    /// <summary>
-    /// Replays the repository's pending ops on GitHub in order. Ops failing with
-    /// NotFound are dropped (already gone); any other failure stops the flush
-    /// and keeps the remaining ops for the next attempt. Returns the number of
-    /// applied ops and the number still pending.
-    /// </summary>
     public async Task<(int applied, int remaining)> FlushUserAsync(
         long telegramId,
         int repositoryId,
@@ -162,9 +148,6 @@ public class PendingSyncService(AppDbContext dbContext)
         return (applied, 0);
     }
 
-    /// <summary>
-    /// Deletes every pending op of a repository (cascade cleanup on repository removal).
-    /// </summary>
     public async Task DeleteAllForRepositoryAsync(long telegramId, int repositoryId)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
@@ -173,11 +156,6 @@ public class PendingSyncService(AppDbContext dbContext)
             $"DELETE FROM PendingNoteOps WHERE TelegramUserId = {uid} AND RepositoryId = {rid}");
     }
 
-    /// <summary>
-    /// Replays pending ops into a virtual delta over the real repository state:
-    /// path → (deleted, content). Content is null when the new content is
-    /// unknown (a move without payload).
-    /// </summary>
     private static Dictionary<string, (bool deleted, string? content)> BuildDelta(List<PendingOp> ops)
     {
         var delta = new Dictionary<string, (bool, string?)>(StringComparer.OrdinalIgnoreCase);
@@ -200,12 +178,6 @@ public class PendingSyncService(AppDbContext dbContext)
         return delta;
     }
 
-    /// <summary>
-    /// Applies pending changes to a directory listing. Also rewrites the
-    /// requested path when it only exists locally under a pending move.
-    /// Returns the effective GitHub path that should be listed
-    /// (null for the repository root).
-    /// </summary>
     public async Task<(string? effectivePath, IReadOnlyList<RepositoryContent> items)> ApplyListOverlayAsync(
         long telegramId, int repositoryId, string? path, Func<string?, Task<IReadOnlyList<RepositoryContent>>> fetch)
     {
@@ -267,10 +239,6 @@ public class PendingSyncService(AppDbContext dbContext)
         return (effectivePath, result);
     }
 
-    /// <summary>
-    /// Content overlay for a single path: pending save/move provides the
-    /// current content; pending deletes and move sources read as missing.
-    /// </summary>
     public PendingContentStatus GetContentOverlay(List<PendingOp> ops, string path)
     {
         var status = new PendingContentStatus();
@@ -305,9 +273,6 @@ public class PendingSyncService(AppDbContext dbContext)
         return status;
     }
 
-    /// <summary>
-    /// Redirects a content read whose path only exists under a pending move.
-    /// </summary>
     public async Task<string?> ResolveEffectiveContentPathAsync(long telegramId, int repositoryId, string path)
     {
         var ops = await GetOpsAsync(telegramId, repositoryId);

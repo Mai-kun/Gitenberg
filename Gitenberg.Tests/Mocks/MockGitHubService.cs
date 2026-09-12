@@ -7,7 +7,7 @@ namespace Gitenberg.Tests.Mocks;
 public class MockGitHubService : IGitHubService
 {
     public Func<GitHubRepositoryContext, string?, Task<IReadOnlyList<RepositoryContent>>>? GetNotesFunc { get; set; }
-    public Func<GitHubRepositoryContext, string, Task<string>>? GetNoteContentFunc { get; set; }
+    public Func<GitHubRepositoryContext, string, Task<string?>>? GetNoteContentFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, string, Task>? CreateOrUpdateNoteFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, Task>? DeleteNoteFunc { get; set; }
     public Func<GitHubRepositoryContext, string, string, string?, string, Task>? MoveNoteFunc { get; set; }
@@ -29,7 +29,7 @@ public class MockGitHubService : IGitHubService
             : Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent>());
     }
 
-    public Task<string> GetNoteContentAsync(GitHubRepositoryContext context, string path)
+    public Task<string?> GetNoteContentAsync(GitHubRepositoryContext context, string path)
     {
         return GetNoteContentFunc != null
             ? GetNoteContentFunc(context, path)

@@ -31,9 +31,9 @@ public class GitHubService : IGitHubService
             : await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
     }
 
-    public async Task<string> GetNoteContentAsync(GitHubRepositoryContext context, string path)
+    public async Task<string?> GetNoteContentAsync(GitHubRepositoryContext context, string path)
     {
-        var client = CreateClient(context.Token);
+        var client = ResolveClient(context.Token);
         var contents = await client.Repository.Content.GetAllContents(context.Owner, context.Repo, path);
 
         // Directory paths must not be read as notes. GitHub returns either:
@@ -67,7 +67,8 @@ public class GitHubService : IGitHubService
             }
         }
 
-        // Content may still be null/empty for very large files; callers handle that.
+        // Null only for files > 1 MB, whose content GitHub omits; callers
+        // treat that as "too large" rather than fetching the blob.
         return file.Content;
     }
 

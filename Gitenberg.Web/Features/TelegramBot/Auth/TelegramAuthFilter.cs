@@ -3,14 +3,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Gitenberg.Web.Features.TelegramBot.Auth;
 
-/// <summary>
-/// Endpoint filter that authenticates Telegram Mini App requests via signed <c>initData</c>
-/// supplied in the Authorization header ("tma &lt;initData&gt;", "Bearer &lt;initData&gt;" or raw).
-/// On success the verified user id is stored in <see cref="HttpContext.Items"/> under
-/// <see cref="ItemsKey"/>. In Development, requests without an Authorization header are allowed
-/// through so the legacy X-Telegram-Id / telegramId fallback keeps working; Production requires
-/// signed initData.
-/// </summary>
 public sealed class TelegramAuthFilter(
     ITelegramAuthValidator validator,
     IWebHostEnvironment environment,

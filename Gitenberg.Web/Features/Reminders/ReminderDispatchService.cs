@@ -8,11 +8,6 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace Gitenberg.Web.Features.Reminders;
 
-/// <summary>
-/// Periodically delivers due reminders to the user's Telegram chat. A failed
-/// delivery bumps Attempts; after MaxAttempts failures the reminder is left
-/// unsent and no longer retried.
-/// </summary>
 public class ReminderDispatchService(
     IServiceScopeFactory scopeFactory,
     BotConfiguration botConfig,

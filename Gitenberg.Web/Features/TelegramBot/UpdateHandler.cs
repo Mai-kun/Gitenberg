@@ -279,10 +279,6 @@ public class UpdateHandler(
         return string.Join("\n", lines);
     }
 
-    /// <summary>
-    /// Downloads and commits the largest photo in the message; returns the
-    /// markdown image path relative to the note file, or null when there is no photo.
-    /// </summary>
     private async Task<string?> SavePhotoAsync(
         Message message,
         GitHubRepositoryContext context,

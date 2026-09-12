@@ -30,7 +30,6 @@ public class GlobalExceptionHandlerTests
     [InlineData(typeof(CryptographicException), StatusCodes.Status401Unauthorized, "Token Decryption Failed")]
     [InlineData(typeof(ArgumentException), StatusCodes.Status400BadRequest, "Invalid Argument")]
     [InlineData(typeof(InvalidOperationException), StatusCodes.Status400BadRequest, "Invalid Operation")]
-    [InlineData(typeof(Exception), StatusCodes.Status500InternalServerError, "Internal Server Error")]
     public async Task TryHandleAsync_ShouldMapExceptionsToCorrectStatusCodeAndTitle(Type exceptionType, int expectedStatusCode, string expectedTitle)
     {
         // Arrange
@@ -60,5 +59,21 @@ public class GlobalExceptionHandlerTests
         _problemDetailsService.WrittenContext!.ProblemDetails.Status.Should().Be(expectedStatusCode);
         _problemDetailsService.WrittenContext!.ProblemDetails.Title.Should().Be(expectedTitle);
         _problemDetailsService.WrittenContext!.ProblemDetails.Detail.Should().Be(exception.Message);
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_UnmappedException_ShouldNotLeakExceptionMessage()
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        var exception = new Exception("secret internal detail: C:\\keys\\path");
+
+        // Act
+        var result = await _handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        // Assert
+        result.Should().BeTrue();
+        context.Response.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        _problemDetailsService.WrittenContext!.ProblemDetails.Detail.Should().NotContain(exception.Message);
     }
 }

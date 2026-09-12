@@ -1,9 +1,5 @@
 namespace Gitenberg.Web.Features.Search;
 
-/// <summary>
-/// Periodically refreshes the local FTS5 note index in the background.
-/// Runs one cycle immediately at startup and then every IndexingIntervalMinutes.
-/// </summary>
 public class NoteIndexingService(
     IServiceScopeFactory scopeFactory,
     SearchConfiguration configuration,

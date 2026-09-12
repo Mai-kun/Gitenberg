@@ -8,12 +8,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Gitenberg.Web.Features.Repositories;
 
-/// <summary>
-/// Multi-repo management: a user keeps several GitHub repositories
-/// ("Personal", "Work") and switches the active one. Notes, search, the bot
-/// and sync always operate on the active repository; pending ops and the
-/// search index stay scoped per repository, so switching is safe at any time.
-/// </summary>
 public static class RepositoriesEndpoints
 {
     public const int MaxRepositoriesPerUser = 10;

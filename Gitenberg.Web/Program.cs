@@ -34,8 +34,6 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Services(services)
         .Enrich.FromLogContext());
 
-builder.Services.AddOpenApi();
-
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
@@ -118,6 +116,11 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 app.UseExceptionHandler();
+// Redirection and request logging must precede the endpoints and static
+// files: registered later they never run, because matched endpoints and
+// UseStaticFiles short-circuit the pipeline.
+app.UseHttpsRedirection();
+app.UseSerilogRequestLogging();
 app.UseRateLimiter();
 
 using (var scope = app.Services.CreateScope())
@@ -160,9 +163,6 @@ app.MapActivityEndpoints();
 app.MapTasksEndpoints();
 app.MapPinsEndpoints();
 app.MapShareEndpoints();
-
-app.UseHttpsRedirection();
-app.UseSerilogRequestLogging();
 
 try
 {

@@ -14,10 +14,6 @@ using Xunit;
 
 namespace Gitenberg.Tests.Features.Sync;
 
-/// <summary>
-/// Pending ops and reminders are scoped per repository: identical note paths
-/// in two repositories ("Personal" and "Work") must stay fully independent.
-/// </summary>
 public class RepositoryScopedDataTests
 {
     private readonly TokenEncryptionService _encryptionService;

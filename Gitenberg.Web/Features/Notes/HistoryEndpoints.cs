@@ -11,11 +11,6 @@ using Octokit;
 
 namespace Gitenberg.Web.Features.Notes;
 
-/// <summary>
-/// Version history for notes: every edit is a commit, so history is the commit
-/// list of the file and restoring a version enqueues a "save" op with the old
-/// content (a new commit, no Git history rewrite).
-/// </summary>
 public static class HistoryEndpoints
 {
     public static void MapHistoryEndpoints(this IEndpointRouteBuilder app)

@@ -13,7 +13,6 @@ public class User
 
     public string RepositoryName { get; set; } = string.Empty;
 
-    /// <summary>Repository currently used by notes, search, the bot and sync.</summary>
     public int? SelectedRepositoryId { get; set; }
 
     public DateTime CreatedAt { get; set; }

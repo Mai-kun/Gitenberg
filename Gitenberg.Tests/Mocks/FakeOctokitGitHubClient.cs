@@ -6,26 +6,14 @@ using Octokit;
 
 namespace Gitenberg.Tests.Mocks;
 
-/// <summary>
-/// Recorded CreateFile call routed through the Octokit content API.
-/// </summary>
 public record CreatedFile(string Owner, string Repo, string Path, CreateFileRequest Request);
 
-/// <summary>Recorded Repository.Commit.GetAll call (version history).</summary>
 public record CommitQuery(string Owner, string Repo, CommitRequest Request, ApiOptions Options);
 
-/// <summary>Recorded Repository.Content.GetAllContentsByRef call (content at a commit).</summary>
 public record ContentsByRefQuery(string Owner, string Repo, string Path, string Reference);
 
-/// <summary>Recorded Git.Blob.Get call (large-file fallback).</summary>
 public record BlobQuery(string Owner, string Repo, string Sha);
 
-/// <summary>
-/// Hand-rolled Octokit fake built with DispatchProxy: the
-/// Repository.Content.CreateFile path is implemented and recorded, plus the
-/// members needed for version history (Commit.GetAll, GetAllContentsByRef,
-/// Git.Blob.Get); everything else throws.
-/// </summary>
 public class FakeOctokitGitHubClient : DispatchProxy
 {
     private static readonly MethodInfo DispatchProxyCreate = typeof(DispatchProxy)

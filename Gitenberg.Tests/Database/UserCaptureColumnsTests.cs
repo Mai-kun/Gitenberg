@@ -12,10 +12,6 @@ namespace Gitenberg.Tests.Database;
 
 public class UserCaptureColumnsTests
 {
-    /// <summary>
-    /// Simulates a gitenberg.db created before quick capture existed: the Users
-    /// table is created manually so EnsureCreated() becomes a no-op.
-    /// </summary>
     private static (SqliteConnection Connection, AppDbContext DbContext) CreateLegacyDatabase()
     {
         var connection = new SqliteConnection("DataSource=:memory:");

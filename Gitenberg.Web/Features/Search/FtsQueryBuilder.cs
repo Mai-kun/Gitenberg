@@ -1,11 +1,5 @@
 namespace Gitenberg.Web.Features.Search;
 
-/// <summary>
-/// Builds a safe FTS5 MATCH expression from user input: each whitespace-separated
-/// term becomes a quoted prefix term ("term"*). This avoids syntax errors
-/// from user input (quotes, #tags, punctuation) and enables partial
-/// matches for titles and tags.
-/// </summary>
 public static class FtsQueryBuilder
 {
     public const int MaxTerms = 8;

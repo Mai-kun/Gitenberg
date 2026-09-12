@@ -370,10 +370,6 @@ input, textarea {
   color: var(--tg-hint);
 }
 
-.search-results {
-  padding: 0 var(--pad) 10px;
-}
-
 .search-result {
   display: block;
   width: 100%;
@@ -403,13 +399,6 @@ input, textarea {
   font-weight: 700;
 }
 
-.search-hint {
-  font-size: 12px;
-  color: var(--tg-hint);
-  padding: 4px var(--pad) 8px;
-  text-align: center;
-}
-
 .notes-list {
   flex: 1;
   padding: 0 var(--pad) 96px;
@@ -422,7 +411,6 @@ input, textarea {
   width: 100%;
   text-align: left;
   padding: 12px 12px;
-  border-radius: var(--radius);
   border-bottom: 1px solid var(--tg-section-sep);
   border-radius: 0;
   transition: background 0.1s ease;
@@ -1256,7 +1244,6 @@ input, textarea {
   #view-explorer > .activity-card,
   #view-explorer > .breadcrumbs,
   #view-explorer > .search-wrap,
-  #view-explorer > .search-results,
   #view-explorer > .notes-list,
   #view-explorer > .tasks-toolbar,
   #view-explorer > .tasks-list,
@@ -1267,8 +1254,7 @@ input, textarea {
   #view-editor > .editor-actions,
   #view-editor > .status-text,
   #view-explorer > .status-text,
-  #view-settings > .settings-body,
-  #view-explorer > .search-hint {
+  #view-settings > .settings-body {
     max-width: 640px;
     width: 100%;
     margin-left: auto;

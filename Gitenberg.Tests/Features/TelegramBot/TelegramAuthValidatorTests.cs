@@ -17,12 +17,6 @@ public class TelegramAuthValidatorTests
     private readonly TelegramAuthValidator _validator = new(
         TestBotToken, NullLogger<TelegramAuthValidator>.Instance);
 
-    /// <summary>
-    /// Builds signed initData exactly the way Telegram signs it: URL-encode all values,
-    /// sort every field except 'hash' alphabetically (the 'signature' field, when
-    /// present, IS part of the data check string) and HMAC-SHA256 the data check string
-    /// with the WebAppData-derived secret key.
-    /// </summary>
     private static string Sign(string botToken, string dataCheckString)
     {
         var secretKey = HMACSHA256.HashData(

@@ -7,13 +7,6 @@ namespace Gitenberg.Web.Features.Shares;
 
 public sealed record ShareLink(string Token, long TelegramUserId, int RepositoryId, string NotePath, DateTime CreatedAt);
 
-/// <summary>
-/// Public "share web view" links: a persistent random token mapping a note
-/// (telegram user + repository + path) to a read-only web page. Kept in SQLite
-/// (not in the repository) because the token is a server-side secret; raw SQL
-/// instead of an EF entity, following the per-feature table pattern of
-/// PinnedItems/Reminders/PendingNoteOps. Paths are stored trimmed of slashes.
-/// </summary>
 public class ShareLinksService(AppDbContext dbContext)
 {
     public static void EnsureTableCreated(AppDbContext db)
@@ -32,11 +25,6 @@ public class ShareLinksService(AppDbContext dbContext)
             """);
     }
 
-    /// <summary>
-    /// Returns the active (not revoked) share link of the note, creating one
-    /// when absent. Idempotent: repeated calls for the same note hand out the
-    /// same token, so the URL stays stable across editor sessions.
-    /// </summary>
     public async Task<ShareLink> CreateOrGetAsync(long telegramId, int repositoryId, string notePath)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
@@ -57,7 +45,11 @@ public class ShareLinksService(AppDbContext dbContext)
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT OR IGNORE INTO NoteShareLinks (Token, TelegramUserId, RepositoryId, NotePath, CreatedAt, RevokedAt) VALUES ({token}, {uid}, {rid}, {path}, {createdAt.ToString("o")}, NULL)"
         );
-        return new ShareLink(token, telegramId, repositoryId, path, createdAt);
+
+        // A concurrent request may have won the insert (INSERT OR IGNORE):
+        // hand out the stored token, never the discarded one.
+        return await QueryActiveAsync(uid, rid, path)
+               ?? new ShareLink(token, telegramId, repositoryId, path, createdAt);
     }
 
     public async Task<ShareLink?> GetActiveAsync(long telegramId, int repositoryId, string notePath)
@@ -67,7 +59,6 @@ public class ShareLinksService(AppDbContext dbContext)
         return await QueryActiveAsync(uid, rid, NormalizePath(notePath));
     }
 
-    /// <summary>Resolves a token handed out earlier; revoked tokens read as missing.</summary>
     public async Task<ShareLink?> GetByTokenAsync(string token)
     {
         if (string.IsNullOrWhiteSpace(token))
@@ -81,7 +72,6 @@ public class ShareLinksService(AppDbContext dbContext)
         return row == null ? null : MapRow(row);
     }
 
-    /// <summary>Revokes the link so its URL stops working immediately. Owner-scoped.</summary>
     public async Task<bool> RevokeAsync(long telegramId, string token)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);

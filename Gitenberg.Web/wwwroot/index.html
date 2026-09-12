@@ -79,7 +79,7 @@
   <section id="view-explorer" class="view" hidden>
     <header class="explorer-header">
       <h1 id="explorer-title" data-i18n="explorerTitle">Заметки</h1>
-      <button id="btn-lang" class="icon-btn lang-btn" aria-label="Switch language" title="Switch language">EN</button>
+      <button id="btn-lang" class="icon-btn lang-btn" data-i18n-title="langSwitchTitle" aria-label="Switch language" title="Switch language">EN</button>
       <button id="btn-sync" class="icon-btn" data-i18n-title="syncNow" aria-label="Синхронизировать" title="Синхронизировать" hidden>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
@@ -145,8 +145,6 @@
         <span class="spinner" aria-hidden="true"></span>
       </button>
     </div>
-
-    <div id="search-results" class="search-results" hidden></div>
 
     <div id="explorer-status" class="status-text" hidden></div>
 
@@ -325,7 +323,7 @@
         </svg>
         <span data-i18n="shareAction">Поделиться</span>
       </button>
-      <button id="info-move" type="button" class="btn btn-secondary" hidden>Переместить / переименовать</button>
+      <button id="info-move" type="button" class="btn btn-secondary" data-i18n="moveRenameAction" hidden>Переместить / переименовать</button>
       <button id="info-pin" type="button" class="btn btn-secondary" hidden>
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 17v5"/>
@@ -458,7 +456,7 @@
         <textarea id="kanban-card-desc" rows="5"></textarea>
       </div>
       <div id="kanban-card-done-field" class="field kanban-done-field">
-        <label for="kanban-card-done">Выполнено</label>
+        <label for="kanban-card-done" data-i18n="kanbanDone">Выполнено</label>
         <input id="kanban-card-done" type="checkbox">
       </div>
       <div id="kanban-error" class="error-text" hidden></div>

@@ -32,10 +32,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         modelBuilder.Entity<IndexedNote>().HasKey(n => new { n.TelegramUserId, n.RepositoryId, n.NotePath });
     }
 
-    /// <summary>
-    /// EF Core cannot model SQLite virtual tables, so the FTS5 table is created with raw SQL.
-    /// Must be called after <c>Database.EnsureCreated()</c>.
-    /// </summary>
     public void EnsureFtsTableCreated()
     {
         Database.ExecuteSqlRaw(
@@ -46,11 +42,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
     }
 
-    /// <summary>
-    /// EnsureCreated() does not add columns to tables that already exist, so quick-capture
-    /// columns on Users are added with raw SQL for databases created before the feature.
-    /// Must be called after <c>Database.EnsureCreated()</c>.
-    /// </summary>
     public void EnsureUserCaptureColumnsCreated()
     {
         var existingColumns = GetTableColumns("Users");
@@ -59,18 +50,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         AddColumnIfMissing(existingColumns, "Users", "AttachmentsPath", "TEXT NOT NULL DEFAULT 'inbox/attachments'");
     }
 
-    /// <summary>
-    /// Multi-repo migration: introduces the Repositories table and the
-    /// RepositoryId dimension on everything that stores per-note data
-    /// (search index, pending ops, reminders). Databases created before
-    /// multi-repo had a single repository per user stored on the Users row,
-    /// so that row is seeded as the user's first repository. Idempotent:
-    /// every step checks the current schema and skips when already applied,
-    /// so databases created fresh under the new model (including test
-    /// EnsureCreated databases) pass through unchanged.
-    /// Must be called after <c>Database.EnsureCreated()</c>, the FTS table,
-    /// PendingNoteOps and Reminders tables.
-    /// </summary>
     public void EnsureRepositoriesTableCreated()
     {
         Database.ExecuteSqlRaw("""
@@ -121,11 +100,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         RebuildNoteSearchFtsWithRepositoryId();
     }
 
-    /// <summary>
-    /// Adds the RepositoryId column to a raw-SQL per-note table (if the table
-    /// exists and lacks it) and maps pre-existing rows to the user's seeded
-    /// repository.
-    /// </summary>
     private void BackfillRepositoryIdColumn(string tableName)
     {
         if (!TableExists(tableName))

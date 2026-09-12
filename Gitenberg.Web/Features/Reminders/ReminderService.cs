@@ -9,14 +9,6 @@ public sealed record ReminderMarker(DateTime FireAtUtc, string Text);
 
 public sealed record Reminder(long Id, long TelegramId, int RepositoryId, string? NotePath, string Text, DateTime FireAtUtc);
 
-/// <summary>
-/// SQLite-backed reminders. Note markers ("@remind when [text]") are kept in
-/// sync with the note content: every save reconciles the pending (unsent)
-/// reminders of that note, so erasing a marker cancels the reminder and a
-/// changed text updates it. Already-sent reminders are never touched.
-/// Reminders are scoped to a repository: identical note paths in different
-/// repositories stay independent.
-/// </summary>
 public partial class ReminderService(AppDbContext dbContext)
 {
     public const int MaxAttempts = 5;
@@ -80,7 +72,6 @@ public partial class ReminderService(AppDbContext dbContext)
         return markers;
     }
 
-    /// <summary>Display fallback for markers without a text: the first heading or the file name.</summary>
     public static string ExtractNoteTitle(string? content, string notePath)
     {
         if (!string.IsNullOrEmpty(content))
@@ -102,11 +93,6 @@ public partial class ReminderService(AppDbContext dbContext)
     public static string FormatLocal(DateTime fireAtUtc) =>
         fireAtUtc.AddHours(3).ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture);
 
-    /// <summary>
-    /// Full reconcile of unsent reminders for one note against its new content:
-    /// markers that disappeared cancel their reminders, changed texts update,
-    /// new markers are scheduled. Fire times are compared by their ISO string.
-    /// </summary>
     public async Task UpsertForNoteAsync(long telegramId, int repositoryId, string notePath, string? content)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
@@ -175,7 +161,6 @@ public partial class ReminderService(AppDbContext dbContext)
         );
     }
 
-    /// <summary>Deletes every unsent reminder of a repository (cascade cleanup on repository removal).</summary>
     public async Task DeleteAllForRepositoryAsync(long telegramId, int repositoryId)
     {
         var uid = telegramId.ToString(CultureInfo.InvariantCulture);
@@ -185,7 +170,6 @@ public partial class ReminderService(AppDbContext dbContext)
         );
     }
 
-    /// <summary>Unsent, due reminders: due now and under the attempt limit.</summary>
     public async Task<List<Reminder>> GetDueAsync(DateTime utcNow)
     {
         var nowIso = utcNow.ToString("o");

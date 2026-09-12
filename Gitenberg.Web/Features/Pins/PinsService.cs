@@ -6,14 +6,6 @@ namespace Gitenberg.Web.Features.Pins;
 
 public sealed record PinnedItem(string ItemPath, DateTime PinnedAt);
 
-/// <summary>
-/// Pinned notes and folders ("вынести наверх" markers) shown in the explorer.
-/// Kept in SQLite (not in the repository) because they are per-user UI
-/// metadata, and scoped per repository so identical paths in different
-/// repositories stay independent. Raw SQL instead of an EF entity: ItemPath is
-/// part of the primary key, and move-reassignment would otherwise require
-/// modifying key values, which tracked entities do not allow.
-/// </summary>
 public class PinsService(AppDbContext dbContext)
 {
     public static void EnsureTableCreated(AppDbContext db)
