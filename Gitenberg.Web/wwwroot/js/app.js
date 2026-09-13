@@ -5,6 +5,7 @@ import * as editor from './editor.js';
 import { getVaultIndex, invalidateVaultIndex } from './vault.js';
 import { initI18n, t, getLang, setLang, applyStatic } from './i18n.js';
 import { applyTheme, getTheme, setTheme } from './theme.js';
+import { initToc } from './toc.js';
 
 // ---------------------------------------------------------------------------
 // UI strings (i18n: RU/EN, auto-detected on first run)
@@ -2753,6 +2754,7 @@ initI18n();
 // Re-apply the saved theme now that the DOM is up: the pre-paint snippet
 // already set data-theme, this syncs the hljs palettes for "auto".
 applyTheme(getTheme());
+initToc();
 restartAutosyncTimer();
 void bootstrap();
 void refreshSyncBadge();
