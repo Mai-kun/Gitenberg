@@ -37,7 +37,7 @@ public static class ActivityEndpoints
         if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." }
+                new { Error = "No authenticated user: sign in with a GitHub token first." }
             );
         }
 

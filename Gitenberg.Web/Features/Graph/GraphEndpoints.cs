@@ -102,12 +102,6 @@ public static class GraphEndpoints
         }
 
         var graph = WikiLinkGraph.Build(notes, MaxNodes);
-        return Results.Ok(
-            new
-            {
-                Nodes = graph.Nodes.Select(n => new { n.Path, n.Name, n.Degree }),
-                Links = graph.Links.Select(l => new { l.Source, l.Target }),
-            }
-        );
+        return Results.Ok(graph);
     }
 }

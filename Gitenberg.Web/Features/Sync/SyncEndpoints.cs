@@ -38,7 +38,7 @@ public static class SyncEndpoints
         if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
+                new { Error = "No authenticated user: sign in with a GitHub token first." });
         }
 
         var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
@@ -64,13 +64,13 @@ public static class SyncEndpoints
         if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
+                new { Error = "No authenticated user: sign in with a GitHub token first." });
         }
 
         var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
+            return Results.NotFound(new { Error = $"User with ID {userId} not found." });
         }
 
         // Ops live per repository, and a previous session may have switched
