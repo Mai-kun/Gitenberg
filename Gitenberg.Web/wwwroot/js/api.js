@@ -209,6 +209,11 @@ export function getTasks() {
   return request('GET', '/api/notes/tasks');
 }
 
+// Whole-vault link graph: notes as nodes, resolved [[WikiLink]]s as edges.
+export function getGraph() {
+  return request('GET', '/api/notes/graph');
+}
+
 // ---------------------------------------------------------------------------
 // Multi-repo: manage the user's repositories and switch the active one
 // ---------------------------------------------------------------------------

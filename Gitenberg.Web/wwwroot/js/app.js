@@ -5,6 +5,7 @@ import * as editor from './editor.js';
 import { getVaultIndex, invalidateVaultIndex } from './vault.js';
 import { initI18n, t, getLang, setLang, applyStatic } from './i18n.js';
 import { applyTheme, getTheme, setTheme } from './theme.js';
+import { createGraphView } from './graph.js';
 
 // ---------------------------------------------------------------------------
 // UI strings (i18n: RU/EN, auto-detected on first run)
@@ -38,6 +39,7 @@ const els = {
     register: $('view-register'),
     explorer: $('view-explorer'),
     editor: $('view-editor'),
+    graph: $('view-graph'),
   },
   registerForm: $('register-form'),
   regToken: $('reg-token'),
@@ -163,6 +165,12 @@ const els = {
   tasksFilterActive: $('tasks-filter-active'),
   tasksFilterAll: $('tasks-filter-all'),
   tasksList: $('tasks-list'),
+  btnGraph: $('btn-graph'),
+  btnGraphBack: $('btn-graph-back'),
+  graphOrphans: $('graph-orphans'),
+  graphStats: $('graph-stats'),
+  graphCanvas: $('graph-canvas'),
+  graphStatus: $('graph-status'),
 };
 
 const state = {
@@ -204,6 +212,16 @@ function extractTags(text) {
 }
 
 els.views.settings = $('view-settings'); // extra view routed by showView
+
+// The canvas visualization itself lives in graph.js; clicking a node opens
+// the note in the same editor the explorer uses.
+const graphView = createGraphView({
+  canvas: els.graphCanvas,
+  onOpenNote: (path) => openEditor('edit', path),
+  onStats: ({ total, links, orphans }) => {
+    els.graphStats.textContent = total ? STRINGS.graphStats(total, links, orphans) : '';
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Small UI utilities
@@ -2507,6 +2525,37 @@ async function saveSettings() {
   }
 }
 
+// The graph always refetches on entry: edits made since the last visit may
+// have added or removed [[WikiLink]]s.
+async function openGraph() {
+  showView('graph');
+  els.graphStatus.hidden = true;
+  els.graphStats.textContent = '';
+  graphView.setData({ nodes: [], links: [] });
+  try {
+    const data = await api.getGraph();
+    if (els.views.graph.hidden) return;
+    const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+    if (!nodes.length) {
+      setError(els.graphStatus, STRINGS.graphEmpty);
+    }
+    graphView.setData(data);
+    graphView.activate();
+  } catch (error) {
+    if (els.views.graph.hidden) return;
+    showErrorToast(error);
+    void enterExplorer(state.currentPath);
+  }
+}
+
+let graphOrphansOnly = false;
+els.btnGraph.addEventListener('click', () => void openGraph());
+els.btnGraphBack.addEventListener('click', () => void enterExplorer(state.currentPath));
+els.graphOrphans.addEventListener('click', () => {
+  graphOrphansOnly = !graphOrphansOnly;
+  els.graphOrphans.classList.toggle('is-active', graphOrphansOnly);
+  graphView.setOrphansOnly(graphOrphansOnly);
+});
 els.btnSettings.addEventListener('click', () => void openSettings());
 els.settingsSave.addEventListener('click', () => void saveSettings());
 els.settingsBack.addEventListener('click', () => void enterExplorer(state.currentPath));
@@ -2697,6 +2746,7 @@ els.btnEditorSave.addEventListener('click', () => void saveCurrentNote());
 els.views.register.hidden = true;
 els.views.explorer.hidden = true;
 els.views.editor.hidden = true;
+els.views.graph.hidden = true;
 
 async function bootstrap() {
   showView('explorer');

@@ -102,6 +102,11 @@
         </svg>
         <span id="sync-badge" class="sync-badge" hidden></span>
       </button>
+      <button id="btn-graph" class="icon-btn" data-i18n-title="graphTitle" aria-label="Граф связей" title="Граф связей">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/>
+        </svg>
+      </button>
       <button id="btn-settings" class="icon-btn" data-i18n-title="settingsTitle" aria-label="Настройки" title="Настройки">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -184,6 +189,27 @@
         <path d="M12 5v14M5 12h14"/>
       </svg>
     </button>
+  </section>
+
+  <!-- ============ View: Interactive Link Graph ============ -->
+  <section id="view-graph" class="view view-graph" hidden>
+    <header class="explorer-header">
+      <button id="btn-graph-back" class="icon-btn" data-i18n-title="back" aria-label="Назад" title="Назад">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+      <h1 id="graph-title" data-i18n="graphTitle">Граф связей</h1>
+    </header>
+    <div class="graph-toolbar">
+      <button id="graph-orphans" type="button" class="filter-chip" data-i18n="graphFilterOrphans">Только одиночки</button>
+      <span id="graph-stats" class="graph-stats"></span>
+    </div>
+    <div id="graph-canvas-wrap" class="graph-canvas-wrap">
+      <canvas id="graph-canvas"></canvas>
+      <div id="graph-status" class="graph-empty" hidden></div>
+      <div id="graph-hint" class="graph-hint" data-i18n="graphHint">Тяните узлы и холст, колесо или щипок — масштаб, клик по узлу — открыть заметку</div>
+    </div>
   </section>
 
   <!-- ============ View: Markdown Editor ============ -->
