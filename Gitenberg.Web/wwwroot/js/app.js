@@ -758,14 +758,18 @@ function restoreActivitySelection() {
     }
   }
   const weeks = monthWeeks(activitySel.year, activitySel.month);
-  const storedWeek = Number(localStorage.getItem(ACTIVITY_WEEK_KEY));
+  // Number(null) is 0, so a missing entry must be checked before conversion.
+  const storedWeekRaw = localStorage.getItem(ACTIVITY_WEEK_KEY);
+  const storedWeek = storedWeekRaw === null ? Number.NaN : Number(storedWeekRaw);
   if (Number.isInteger(storedWeek) && storedWeek >= 0 && storedWeek < weeks.length) {
     activitySel.week = storedWeek;
   } else {
     const currentPeriod = activitySel.year === now.getFullYear() && activitySel.month === now.getMonth();
     activitySel.week = 0;
     if (currentPeriod) {
-      const index = weeks.findIndex((start) => start <= now && now <= addDays(start, 6));
+      // Strict '<' next Monday: 'now' carries a time of day, so on Sundays
+      // it is already past the midnight of the week's last day.
+      const index = weeks.findIndex((start) => start <= now && now < addDays(start, 7));
       if (index >= 0) activitySel.week = index;
     }
   }
@@ -916,11 +920,16 @@ function applyActivityCollapsed() {
   els.activityToggle.setAttribute('aria-expanded', heatmapCollapsed ? 'false' : 'true');
 }
 
+function updateActivitySummary() {
+  const total = activityDays.reduce((sum, d) => sum + d.count, 0);
+  els.activitySummary.textContent = STRINGS.activitySummary(total, computeStreak(activityDays));
+}
+
 async function refreshHeatmap() {
   try {
     const data = await api.getActivityHeatmap();
     activityDays = Array.isArray(data?.days) ? data.days : [];
-    els.activitySummary.textContent = STRINGS.activitySummary(data?.total ?? 0, computeStreak(activityDays));
+    updateActivitySummary();
     state.heatmapOk = true;
   } catch {
     state.heatmapOk = false;
@@ -2699,6 +2708,7 @@ document.addEventListener('language-changed', () => {
   els.explorerTitle.textContent = STRINGS.explorerTitle;
   els.btnLang.textContent = getLang() === 'ru' ? 'EN' : 'RU';
   if (state.heatmapOk && !els.activityCard.hidden) {
+    updateActivitySummary();
     renderActivityControls();
     void loadActivityPeriod();
   }
@@ -2785,7 +2795,11 @@ async function bootstrap() {
       }
     }
   } catch (error) {
-    if (error instanceof api.ApiError && (error.status === 404 || error.status === 401)) {
+    // 400/404/401 all mean "the vault cannot be shown yet": an anonymous
+    // request (Development bypass), a signed-out session, or an account/repo
+    // that no longer resolves. Land on the sign-in form either way — it is
+    // also the only place that can (re)bind a repository.
+    if (error instanceof api.ApiError && (error.status === 400 || error.status === 404 || error.status === 401)) {
       // 401 — no valid session (first visit or an expired one); 404 — the
       // account is gone. Both mean "we cannot show the vault yet", so land
       // on the sign-in form instead of painting a raw error on it. If auth
