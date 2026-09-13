@@ -508,6 +508,15 @@ export function isPreviewActive() {
     return instance ? Boolean(instance.isPreviewActive()) : false;
 }
 
+// Jump to a 0-based source line (used by the table of contents in edit mode).
+export function scrollToLine(line) {
+    if (!instance) return;
+    const cm = instance.codemirror;
+    cm.setCursor({ line, ch: 0 });
+    cm.scrollIntoView({ line, ch: 0 }, 80);
+    cm.focus();
+}
+
 export function exitPreview() {
     if (instance && instance.isPreviewActive()) {
         instance.togglePreview();

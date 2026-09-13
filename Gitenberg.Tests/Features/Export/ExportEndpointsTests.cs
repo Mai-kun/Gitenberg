@@ -10,6 +10,7 @@ using Gitenberg.Web.Services.Abstractions;
 using Gitenberg.Tests.Mocks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -84,7 +85,11 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            null, null, null, db, _gitHubService, CreateResolver(db));
+            null,
+            db,
+            _gitHubService,
+            CreateResolver(db)
+        );
 
         // Assert
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -99,7 +104,12 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            12345, null, null, db, _gitHubService, CreateResolver(db));
+            null,
+            db,
+            _gitHubService,
+            CreateResolver(db),
+            AuthenticatedContext(12345)
+        );
 
         // Assert
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -114,7 +124,12 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            12345, null, null, db, _gitHubService, CreateResolver(db));
+            null,
+            db,
+            _gitHubService,
+            CreateResolver(db),
+            AuthenticatedContext(12345)
+        );
 
         // Assert
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
@@ -131,7 +146,12 @@ public class ExportEndpointsTests
 
         // Act
         var result = await ExportEndpoints.DownloadArchive(
-            12345, null, null, db, _gitHubService, CreateResolver(db));
+            null,
+            db,
+            _gitHubService,
+            CreateResolver(db),
+            AuthenticatedContext(12345)
+        );
 
         // Assert
         var fileResult = result.Should().BeAssignableTo<FileContentHttpResult>().Subject;
@@ -146,4 +166,14 @@ public class ExportEndpointsTests
         context.Token.Should().Be("github_token");
         reference.Should().BeNull();
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }

@@ -8,6 +8,7 @@ using Gitenberg.Web.Models;
 using Gitenberg.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -38,7 +39,6 @@ public class RepositoryEndpointsTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         PendingSyncService.EnsureTableCreated(dbContext);
-        Gitenberg.Web.Features.Reminders.ReminderService.EnsureTableCreated(dbContext);
         Gitenberg.Web.Features.Pins.PinsService.EnsureTableCreated(dbContext);
         Gitenberg.Web.Features.Shares.ShareLinksService.EnsureTableCreated(dbContext);
         dbContext.EnsureFtsTableCreated();
@@ -92,7 +92,7 @@ public class RepositoryEndpointsTests
     {
         await using var db = CreateInMemoryDbContext();
 
-        var result = await RepositoriesEndpoints.ListRepositories(null, null, db);
+        var result = await RepositoriesEndpoints.ListRepositories(db);
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -102,7 +102,7 @@ public class RepositoryEndpointsTests
     {
         await using var db = CreateInMemoryDbContext();
 
-        var result = await RepositoriesEndpoints.ListRepositories(null, 12345, db);
+        var result = await RepositoriesEndpoints.ListRepositories(db, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
@@ -123,7 +123,7 @@ public class RepositoryEndpointsTests
         });
         await db.SaveChangesAsync();
 
-        var result = await RepositoriesEndpoints.ListRepositories(null, 12345, db);
+        var result = await RepositoriesEndpoints.ListRepositories(db, AuthenticatedContext(12345));
 
         var value = (result as IValueHttpResult)!.Value.Should().BeAssignableTo<List<object>>().Subject;
         value.Should().HaveCount(2);
@@ -148,7 +148,7 @@ public class RepositoryEndpointsTests
         await SeedUserWithRepositoryAsync(db);
         var request = new CreateRepositoryRequest("Работа", "", "owner", "second");
 
-        var result = await RepositoriesEndpoints.CreateRepository(request, null, 12345, db, _encryptionService);
+        var result = await RepositoriesEndpoints.CreateRepository(request, db, _encryptionService, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -160,7 +160,7 @@ public class RepositoryEndpointsTests
         var (user, first) = await SeedUserWithRepositoryAsync(db);
         var request = new CreateRepositoryRequest("Личное", "pat_second", "personal", "notes", InboxPath: "/my-inbox/");
 
-        var result = await RepositoriesEndpoints.CreateRepository(request, null, 12345, db, _encryptionService);
+        var result = await RepositoriesEndpoints.CreateRepository(request, db, _encryptionService, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
 
@@ -184,7 +184,7 @@ public class RepositoryEndpointsTests
         await db.SaveChangesAsync();
 
         var request = new CreateRepositoryRequest("", "pat_1", "owner", "first");
-        var result = await RepositoriesEndpoints.CreateRepository(request, null, 12345, db, _encryptionService);
+        var result = await RepositoriesEndpoints.CreateRepository(request, db, _encryptionService, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
         db.Entry(user).Reload();
@@ -213,7 +213,7 @@ public class RepositoryEndpointsTests
         await db.SaveChangesAsync();
 
         var request = new CreateRepositoryRequest("over", "pat_x", "owner", "over");
-        var result = await RepositoriesEndpoints.CreateRepository(request, null, 12345, db, _encryptionService);
+        var result = await RepositoriesEndpoints.CreateRepository(request, db, _encryptionService, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -229,7 +229,7 @@ public class RepositoryEndpointsTests
         var (_, repository) = await SeedUserWithRepositoryAsync(db);
         var request = new UpdateRepositoryRequest("Личное", null, "new-owner", "renamed");
 
-        var result = await RepositoriesEndpoints.UpdateRepository(repository.Id, request, null, 12345, db, _encryptionService);
+        var result = await RepositoriesEndpoints.UpdateRepository(repository.Id, request, db, _encryptionService, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
         db.Entry(repository).Reload();
@@ -247,7 +247,7 @@ public class RepositoryEndpointsTests
         await SeedUserWithRepositoryAsync(db, userId: 99999, owner: "o", repo: "r2");
         var request = new UpdateRepositoryRequest(null, null, "owner", "first");
 
-        var result = await RepositoriesEndpoints.UpdateRepository(repository.Id, request, null, 99999, db, _encryptionService);
+        var result = await RepositoriesEndpoints.UpdateRepository(repository.Id, request, db, _encryptionService, AuthenticatedContext(99999));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
@@ -273,7 +273,7 @@ public class RepositoryEndpointsTests
         db.Repositories.Add(second);
         await db.SaveChangesAsync();
 
-        var result = await RepositoriesEndpoints.ActivateRepository(second.Id, null, 12345, db);
+        var result = await RepositoriesEndpoints.ActivateRepository(second.Id, db, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
         db.Entry(user).Reload();
@@ -288,7 +288,7 @@ public class RepositoryEndpointsTests
         var (_, first) = await SeedUserWithRepositoryAsync(db);
         var (otherUser, otherRepo) = await SeedUserWithRepositoryAsync(db, userId: 99999, owner: "o", repo: "r2");
 
-        var result = await RepositoriesEndpoints.ActivateRepository(first.Id, null, 99999, db);
+        var result = await RepositoriesEndpoints.ActivateRepository(first.Id, db, AuthenticatedContext(99999));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         db.Entry(otherUser).Reload();
@@ -305,7 +305,7 @@ public class RepositoryEndpointsTests
         await using var db = CreateInMemoryDbContext();
         var (_, repository) = await SeedUserWithRepositoryAsync(db);
 
-        var result = await RepositoriesEndpoints.DeleteRepository(repository.Id, null, 12345, db);
+        var result = await RepositoriesEndpoints.DeleteRepository(repository.Id, db, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         db.Repositories.Should().Contain(r => r.Id == repository.Id);
@@ -336,11 +336,9 @@ public class RepositoryEndpointsTests
             $"INSERT INTO NoteSearchFts (TelegramUserId, RepositoryId, NotePath, Content) VALUES ({user.TelegramId.ToString()}, {first.Id.ToString()}, 'inbox/a.md', 'inbox/a.md\ncontent')");
         var pendingSync = new PendingSyncService(db);
         await pendingSync.EnqueueAsync(user.TelegramId, first.Id, "save", "inbox/a.md", null, "local draft");
-        await new Gitenberg.Web.Features.Reminders.ReminderService(db)
-            .UpsertForNoteAsync(user.TelegramId, first.Id, "inbox/a.md", "@remind 1h");
 
 
-        var result = await RepositoriesEndpoints.DeleteRepository(first.Id, null, 12345, db);
+        var result = await RepositoriesEndpoints.DeleteRepository(first.Id, db, AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
 
@@ -351,9 +349,6 @@ public class RepositoryEndpointsTests
             $"SELECT COUNT(*) AS Value FROM NoteSearchFts WHERE RepositoryId = {first.Id.ToString()}"
         ).SingleAsync()).Should().Be(0);
         (await pendingSync.GetOpsAsync(user.TelegramId, first.Id)).Should().BeEmpty();
-        (await db.Database.SqlQuery<int>(
-            $"SELECT COUNT(*) AS Value FROM Reminders WHERE RepositoryId = {first.Id.ToString()}"
-        ).SingleAsync()).Should().Be(0);
 
         // ...the other repository's data survives and becomes active.
         db.IndexedNotes.Should().Contain(n => n.RepositoryId == second.Id);
@@ -367,9 +362,19 @@ public class RepositoryEndpointsTests
         await using var db = CreateInMemoryDbContext();
         var (_, repository) = await SeedUserWithRepositoryAsync(db);
 
-        var result = await RepositoriesEndpoints.DeleteRepository(repository.Id, null, 55555, db);
+        var result = await RepositoriesEndpoints.DeleteRepository(repository.Id, db, AuthenticatedContext(55555));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         db.Repositories.Should().Contain(r => r.Id == repository.Id);
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }

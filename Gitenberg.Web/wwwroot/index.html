@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Gitenberg</title>
 
-  <!-- Telegram WebApp SDK must load before any of our scripts -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
   <!-- EasyMDE -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css">
   <script src="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.js"></script>
@@ -36,12 +33,6 @@
   <link rel="stylesheet" href="css/toc.css">
 </head>
 <body>
-  <!-- Dev-only bar: shown outside Telegram when initData is unavailable -->
-  <div id="dev-bar" class="dev-bar" hidden>
-    <label for="dev-telegram-id" data-i18n="devBarLabel">Telegram ID для теста</label>
-    <input id="dev-telegram-id" type="number" inputmode="numeric" min="1" value="123456" autocomplete="off">
-  </div>
-
   <!-- ============ View: Registration ============ -->
   <section id="view-register" class="view" hidden>
     <div class="register-card">
@@ -104,6 +95,11 @@
         </svg>
         <span id="sync-badge" class="sync-badge" hidden></span>
       </button>
+      <button id="btn-graph" class="icon-btn" data-i18n-title="graphTitle" aria-label="Граф связей" title="Граф связей">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/>
+        </svg>
+      </button>
       <button id="btn-settings" class="icon-btn" data-i18n-title="settingsTitle" aria-label="Настройки" title="Настройки">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -114,6 +110,11 @@
           <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
           <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
           <path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>
+        </svg>
+      </button>
+      <button id="btn-signout" class="icon-btn" data-i18n-title="signOut" aria-label="Выйти" title="Выйти">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>
         </svg>
       </button>
       <button id="btn-create-note" class="icon-btn" data-i18n-title="createNote" aria-label="Создать заметку" title="Создать заметку">
@@ -200,6 +201,27 @@
         <path d="M12 5v14M5 12h14"/>
       </svg>
     </button>
+  </section>
+
+  <!-- ============ View: Interactive Link Graph ============ -->
+  <section id="view-graph" class="view view-graph" hidden>
+    <header class="explorer-header">
+      <button id="btn-graph-back" class="icon-btn" data-i18n-title="back" aria-label="Назад" title="Назад">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+      <h1 id="graph-title" data-i18n="graphTitle">Граф связей</h1>
+    </header>
+    <div class="graph-toolbar">
+      <button id="graph-orphans" type="button" class="filter-chip" data-i18n="graphFilterOrphans">Только одиночки</button>
+      <span id="graph-stats" class="graph-stats"></span>
+    </div>
+    <div id="graph-canvas-wrap" class="graph-canvas-wrap">
+      <canvas id="graph-canvas"></canvas>
+      <div id="graph-status" class="graph-empty" hidden></div>
+      <div id="graph-hint" class="graph-hint" data-i18n="graphHint">Тяните узлы и холст, колесо или щипок — масштаб, клик по узлу — открыть заметку</div>
+    </div>
   </section>
 
   <!-- ============ View: Markdown Editor ============ -->
@@ -338,7 +360,7 @@
       <div class="field">
         <label for="settings-theme" data-i18n="themeLabel">Тема</label>
         <select id="settings-theme" class="move-select">
-          <option value="auto" data-i18n="themeAuto">Как в Telegram</option>
+          <option value="auto" data-i18n="themeAuto">Как в системе</option>
           <option value="light" data-i18n="themeLight">Светлая</option>
           <option value="dark" data-i18n="themeDark">Тёмная</option>
           <option value="sepia" data-i18n="themeSepia">Сепия</option>
@@ -349,7 +371,7 @@
           <option value="black" data-i18n="themeOled">OLED</option>
         </select>
       </div>
-      <p class="settings-hint" data-i18n="themeHint">Тема применяется сразу и запоминается автоматически. «Как в Telegram» повторяет цвета клиента Telegram.</p>
+      <p class="settings-hint" data-i18n="themeHint">Тема применяется сразу и запоминается автоматически. «Как в системе» повторяет светлую или тёмную тему вашей операционной системы.</p>
       <div class="settings-divider" aria-hidden="true"></div>
       <h2 class="settings-section-title" data-i18n="exportTitle">Экспорт хранилища</h2>
       <p class="settings-hint" data-i18n="exportHint">Скачайте ZIP-архив всего хранилища: все заметки и вложения из репозитория GitHub.</p>

@@ -5,6 +5,8 @@ import * as editor from './editor.js';
 import { getVaultIndex, invalidateVaultIndex } from './vault.js';
 import { initI18n, t, getLang, setLang, applyStatic } from './i18n.js';
 import { applyTheme, getTheme, setTheme } from './theme.js';
+import { createGraphView } from './graph.js';
+import { initToc } from './toc.js';
 
 // ---------------------------------------------------------------------------
 // UI strings (i18n: RU/EN, auto-detected on first run)
@@ -38,6 +40,7 @@ const els = {
     register: $('view-register'),
     explorer: $('view-explorer'),
     editor: $('view-editor'),
+    graph: $('view-graph'),
   },
   registerForm: $('register-form'),
   regToken: $('reg-token'),
@@ -175,6 +178,12 @@ const els = {
   tasksFilterActive: $('tasks-filter-active'),
   tasksFilterAll: $('tasks-filter-all'),
   tasksList: $('tasks-list'),
+  btnGraph: $('btn-graph'),
+  btnGraphBack: $('btn-graph-back'),
+  graphOrphans: $('graph-orphans'),
+  graphStats: $('graph-stats'),
+  graphCanvas: $('graph-canvas'),
+  graphStatus: $('graph-status'),
 };
 
 const state = {
@@ -217,6 +226,16 @@ function extractTags(text) {
 }
 
 els.views.settings = $('view-settings'); // extra view routed by showView
+
+// The canvas visualization itself lives in graph.js; clicking a node opens
+// the note in the same editor the explorer uses.
+const graphView = createGraphView({
+  canvas: els.graphCanvas,
+  onOpenNote: (path) => openEditor('edit', path),
+  onStats: ({ total, links, orphans }) => {
+    els.graphStats.textContent = total ? STRINGS.graphStats(total, links, orphans) : '';
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Small UI utilities
@@ -752,14 +771,18 @@ function restoreActivitySelection() {
     }
   }
   const weeks = monthWeeks(activitySel.year, activitySel.month);
-  const storedWeek = Number(localStorage.getItem(ACTIVITY_WEEK_KEY));
+  // Number(null) is 0, so a missing entry must be checked before conversion.
+  const storedWeekRaw = localStorage.getItem(ACTIVITY_WEEK_KEY);
+  const storedWeek = storedWeekRaw === null ? Number.NaN : Number(storedWeekRaw);
   if (Number.isInteger(storedWeek) && storedWeek >= 0 && storedWeek < weeks.length) {
     activitySel.week = storedWeek;
   } else {
     const currentPeriod = activitySel.year === now.getFullYear() && activitySel.month === now.getMonth();
     activitySel.week = 0;
     if (currentPeriod) {
-      const index = weeks.findIndex((start) => start <= now && now <= addDays(start, 6));
+      // Strict '<' next Monday: 'now' carries a time of day, so on Sundays
+      // it is already past the midnight of the week's last day.
+      const index = weeks.findIndex((start) => start <= now && now < addDays(start, 7));
       if (index >= 0) activitySel.week = index;
     }
   }
@@ -910,11 +933,16 @@ function applyActivityCollapsed() {
   els.activityToggle.setAttribute('aria-expanded', heatmapCollapsed ? 'false' : 'true');
 }
 
+function updateActivitySummary() {
+  const total = activityDays.reduce((sum, d) => sum + d.count, 0);
+  els.activitySummary.textContent = STRINGS.activitySummary(total, computeStreak(activityDays));
+}
+
 async function refreshHeatmap() {
   try {
     const data = await api.getActivityHeatmap();
     activityDays = Array.isArray(data?.days) ? data.days : [];
-    els.activitySummary.textContent = STRINGS.activitySummary(data?.total ?? 0, computeStreak(activityDays));
+    updateActivitySummary();
     state.heatmapOk = true;
   } catch {
     state.heatmapOk = false;
@@ -2708,6 +2736,37 @@ async function saveSettings() {
   }
 }
 
+// The graph always refetches on entry: edits made since the last visit may
+// have added or removed [[WikiLink]]s.
+async function openGraph() {
+  showView('graph');
+  els.graphStatus.hidden = true;
+  els.graphStats.textContent = '';
+  graphView.setData({ nodes: [], links: [] });
+  try {
+    const data = await api.getGraph();
+    if (els.views.graph.hidden) return;
+    const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+    if (!nodes.length) {
+      setError(els.graphStatus, STRINGS.graphEmpty);
+    }
+    graphView.setData(data);
+    graphView.activate();
+  } catch (error) {
+    if (els.views.graph.hidden) return;
+    showErrorToast(error);
+    void enterExplorer(state.currentPath);
+  }
+}
+
+let graphOrphansOnly = false;
+els.btnGraph.addEventListener('click', () => void openGraph());
+els.btnGraphBack.addEventListener('click', () => void enterExplorer(state.currentPath));
+els.graphOrphans.addEventListener('click', () => {
+  graphOrphansOnly = !graphOrphansOnly;
+  els.graphOrphans.classList.toggle('is-active', graphOrphansOnly);
+  graphView.setOrphansOnly(graphOrphansOnly);
+});
 els.btnSettings.addEventListener('click', () => void openSettings());
 els.settingsSave.addEventListener('click', () => void saveSettings());
 els.settingsBack.addEventListener('click', () => void enterExplorer(state.currentPath));
@@ -2850,6 +2909,7 @@ document.addEventListener('language-changed', () => {
   els.explorerTitle.textContent = STRINGS.explorerTitle;
   els.btnLang.textContent = getLang() === 'ru' ? 'EN' : 'RU';
   if (state.heatmapOk && !els.activityCard.hidden) {
+    updateActivitySummary();
     renderActivityControls();
     void loadActivityPeriod();
   }
@@ -2898,6 +2958,7 @@ els.btnEditorSave.addEventListener('click', () => void saveCurrentNote());
 els.views.register.hidden = true;
 els.views.explorer.hidden = true;
 els.views.editor.hidden = true;
+els.views.graph.hidden = true;
 
 async function bootstrap() {
   showView('explorer');
@@ -2935,7 +2996,11 @@ async function bootstrap() {
       }
     }
   } catch (error) {
-    if (error instanceof api.ApiError && (error.status === 404 || error.status === 401)) {
+    // 400/404/401 all mean "the vault cannot be shown yet": an anonymous
+    // request (Development bypass), a signed-out session, or an account/repo
+    // that no longer resolves. Land on the sign-in form either way — it is
+    // also the only place that can (re)bind a repository.
+    if (error instanceof api.ApiError && (error.status === 400 || error.status === 404 || error.status === 401)) {
       // 401 — no valid session (first visit or an expired one); 404 — the
       // account is gone. Both mean "we cannot show the vault yet", so land
       // on the sign-in form instead of painting a raw error on it. If auth
@@ -2954,6 +3019,7 @@ initI18n();
 // Re-apply the saved theme now that the DOM is up: the pre-paint snippet
 // already set data-theme, this syncs the hljs palettes for "auto".
 applyTheme(getTheme());
+initToc();
 restartAutosyncTimer();
 void bootstrap();
 void refreshSyncBadge();

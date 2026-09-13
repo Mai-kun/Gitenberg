@@ -107,6 +107,17 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 app.UseExceptionHandler();
+// API responses are authenticated by a cookie and carry per-user data, so
+// they must never land in the browser HTTP cache (a cached /api/notes from
+// one account could otherwise be shown to the next visitor on the same host).
+app.Use((context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.Headers.CacheControl = "no-store";
+    }
+    return next();
+});
 // Redirection and request logging must precede the endpoints and static
 // files: registered later they never run, because matched endpoints and
 // UseStaticFiles short-circuit the pipeline.

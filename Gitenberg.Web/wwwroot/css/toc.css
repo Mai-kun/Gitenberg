@@ -1,0 +1,75 @@
+/* ==========================================================================
+   Note outline (table of contents) sheet — see js/toc.js. Lives in its own
+   stylesheet because app.css is shared with long-lived feature branches.
+   Built on the same --app-* variables as the rest of the app, so all themes
+   apply automatically.
+   ========================================================================== */
+
+.toc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-bottom: var(--space-4);
+}
+
+.toc-item {
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toc-item:active,
+.toc-item:hover {
+  background: var(--app-secondary);
+}
+
+/* Indentation mirrors the heading hierarchy; deep levels shrink and dim. */
+.toc-level-1 {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.toc-level-2 { padding-left: 22px; }
+
+.toc-level-3 { padding-left: 40px; font-size: 13px; }
+
+.toc-level-4 { padding-left: 58px; font-size: 13px; }
+
+.toc-level-5,
+.toc-level-6 {
+  padding-left: 76px;
+  font-size: 12px;
+  color: var(--app-hint);
+}
+
+.toc-level-6 { padding-left: 94px; }
+
+.toc-empty {
+  margin: 0;
+  padding: var(--space-3) 0;
+  color: var(--app-hint);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* A tapped heading should not glue to the very top edge of the preview. */
+#editor-container .editor-preview-full h1,
+#editor-container .editor-preview-full h2,
+#editor-container .editor-preview-full h3,
+#editor-container .editor-preview-full h4,
+#editor-container .editor-preview-full h5,
+#editor-container .editor-preview-full h6 {
+  scroll-margin-top: 8px;
+}

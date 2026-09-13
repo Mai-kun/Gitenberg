@@ -51,7 +51,7 @@ public static class SearchEndpoints
         var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
+            return Results.NotFound(new { Error = $"User with ID {userId} not found." });
         }
 
         var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);

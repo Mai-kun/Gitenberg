@@ -1733,7 +1733,7 @@ input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   Activity heatmap (GitHub contribution style)
+   Activity statistics: week / month views
    ========================================================================== */
 
 .activity-card {
@@ -1767,42 +1767,80 @@ input[type="checkbox"] {
   padding: 0 12px 10px;
 }
 
-.heatmap-scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
+.heatmap-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
+.heatmap-select {
+  padding: 5px 8px;
+  border: 1px solid var(--app-section-sep);
+  border-radius: var(--radius-sm);
+  background: var(--app-secondary);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.heatmap-select:focus { border-color: var(--app-button); }
+
+.heatmap-weekdays,
 .heatmap-grid {
   display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(7, 11px);
-  grid-auto-columns: 11px;
-  gap: 3px;
-  width: max-content;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  max-width: 420px;
+  margin-inline: auto;
+}
+
+.heatmap-weekdays { margin-bottom: 2px; }
+
+.heatmap-weekday {
+  text-align: center;
+  font-size: 10px;
+  color: var(--app-hint);
 }
 
 .heatmap-cell {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border-radius: 6px;
   background: var(--hm-0);
+  color: var(--app-text);
+  font-size: 10px;
 }
 
 .heatmap-cell.level-1 { background: var(--hm-1); }
 .heatmap-cell.level-2 { background: var(--hm-2); }
 .heatmap-cell.level-3 { background: var(--hm-3); }
 .heatmap-cell.level-4 { background: var(--hm-4); }
-.heatmap-cell.is-future { visibility: hidden; }
+.heatmap-cell.level-3,
+.heatmap-cell.level-4 { color: #ffffff; }
+.heatmap-cell.is-future,
+.heatmap-cell.is-outside { opacity: 0.35; }
 
 .heatmap-legend {
   display: flex;
   align-items: center;
   gap: 3px;
-  margin-top: 6px;
+  margin-top: 8px;
   justify-content: flex-end;
   font-size: 11px;
   color: var(--app-hint);
+}
+
+/* Legend swatches stay tiny squares; grid cells above carry day numbers. */
+.heatmap-legend .heatmap-cell {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
 }
 
 /* GitHub-like green ramps for light and dark environments. */
@@ -2008,3 +2046,71 @@ input[type="checkbox"] {
 .btn-danger-text {
   color: var(--app-destructive);
 }
+
+/* ============ Link graph view ============ */
+
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+}
+
+.graph-stats {
+  font-size: 12.5px;
+  color: var(--app-hint);
+}
+
+.graph-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
+}
+
+#graph-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Canvas gestures are handled manually: pan / pinch / node drag. */
+  touch-action: none;
+  cursor: grab;
+}
+
+#graph-canvas.is-panning {
+  cursor: grabbing;
+}
+
+#graph-canvas.node-hover {
+  cursor: pointer;
+}
+
+.graph-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--app-hint);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.graph-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  padding: 0 12px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--app-hint);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
