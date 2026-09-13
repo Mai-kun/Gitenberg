@@ -2,7 +2,6 @@ using FluentAssertions;
 using Gitenberg.Tests.Mocks;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Models;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
@@ -36,7 +35,6 @@ public class RepositoryScopedDataTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         PendingSyncService.EnsureTableCreated(dbContext);
-        ReminderService.EnsureTableCreated(dbContext);
         dbContext.EnsureFtsTableCreated();
         return dbContext;
     }
@@ -76,33 +74,6 @@ public class RepositoryScopedDataTests
 
         (await pendingSync.GetOpsAsync(42, firstRepoId)).Should().BeEmpty();
         (await pendingSync.GetOpsAsync(42, secondRepoId)).Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task Reminders_StayIsolated_PerRepository()
-    {
-        await using var db = CreateDbContext();
-        var reminderService = new ReminderService(db);
-
-        // Identical note path and marker in two repositories.
-        const string content = "# День\n\n@remind 2h Встать";
-        await reminderService.UpsertForNoteAsync(42, 1, "inbox/today.md", content);
-        await reminderService.UpsertForNoteAsync(42, 2, "inbox/today.md", content);
-
-        // Both reminders exist, one per repository.
-        var due = await reminderService.GetDueAsync(DateTime.UtcNow.AddHours(3));
-        due.Should().HaveCount(2);
-        due.Select(r => r.RepositoryId).Should().BeEquivalentTo([1, 2]);
-
-        // Erasing the marker in repository 1 keeps repository 2's reminder.
-        await reminderService.UpsertForNoteAsync(42, 1, "inbox/today.md", "# День без напоминания");
-        due = await reminderService.GetDueAsync(DateTime.UtcNow.AddHours(3));
-        due.Should().ContainSingle();
-        due[0].RepositoryId.Should().Be(2);
-
-        // Removing the note in repository 2 clears only its own reminder.
-        await reminderService.RemoveForNoteAsync(42, 2, "inbox/today.md");
-        (await reminderService.GetDueAsync(DateTime.UtcNow.AddHours(3))).Should().BeEmpty();
     }
 
     [Fact]

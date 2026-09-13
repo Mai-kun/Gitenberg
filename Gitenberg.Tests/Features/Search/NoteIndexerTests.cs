@@ -2,7 +2,6 @@ using FluentAssertions;
 using Gitenberg.Tests.Infrastructure.FakeClasses;
 using Gitenberg.Tests.Mocks;
 using Gitenberg.Web.Database;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -41,7 +40,6 @@ public class NoteIndexerTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         dbContext.EnsureFtsTableCreated();
-        ReminderService.EnsureTableCreated(dbContext);
         return dbContext;
     }
 
@@ -112,7 +110,7 @@ public class NoteIndexerTests
 
     private NoteIndexer CreateIndexer(AppDbContext db)
     {
-        return new NoteIndexer(db, _gitHubService, _encryptionService, new ReminderService(db), _logger);
+        return new NoteIndexer(db, _gitHubService, _encryptionService, _logger);
     }
 
     [Fact]

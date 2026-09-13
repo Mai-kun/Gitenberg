@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Gitenberg.Web.Database;
 using Gitenberg.Web.Features.Pins;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Repositories;
 using Gitenberg.Web.Features.Shares;
 using Gitenberg.Web.Features.Sync;
@@ -9,6 +8,7 @@ using Gitenberg.Web.Models;
 using Gitenberg.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -39,7 +39,6 @@ public class ShareLinksServiceTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         PendingSyncService.EnsureTableCreated(dbContext);
-        ReminderService.EnsureTableCreated(dbContext);
         PinsService.EnsureTableCreated(dbContext);
         ShareLinksService.EnsureTableCreated(dbContext);
         dbContext.EnsureFtsTableCreated();
@@ -283,11 +282,21 @@ public class ShareLinksServiceTests
         var doomed = await service.CreateOrGetAsync(user.TelegramId, repository.Id, "notes/a.md");
         var kept = await service.CreateOrGetAsync(user.TelegramId, second.Id, "notes/a.md");
 
-        var result = await RepositoriesEndpoints.DeleteRepository(repository.Id, null, user.TelegramId, db);
+        var result = await RepositoriesEndpoints.DeleteRepository(repository.Id, db, httpContext: AuthenticatedContext(user.TelegramId));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult!.StatusCode.Should().Be(200);
         (await service.GetByTokenAsync(doomed.Token)).Should().BeNull("deleted repositories must not leave orphaned links");
         (await service.GetByTokenAsync(kept.Token)).Should().NotBeNull();
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }
