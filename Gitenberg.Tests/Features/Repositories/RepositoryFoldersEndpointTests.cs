@@ -8,6 +8,7 @@ using Gitenberg.Web.Models;
 using Gitenberg.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Octokit;
@@ -130,7 +131,10 @@ public class RepositoryFoldersEndpointTests
         var request = new RepositoryFoldersRequest("owner", "repo", GitHubToken: "t");
 
         var result = await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, null, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService );
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -146,7 +150,12 @@ public class RepositoryFoldersEndpointTests
         var request = new RepositoryFoldersRequest(owner!, repo!, GitHubToken: "t");
 
         var result = await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -158,7 +167,12 @@ public class RepositoryFoldersEndpointTests
         var request = new RepositoryFoldersRequest("owner", "repo");
 
         var result = await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -172,11 +186,19 @@ public class RepositoryFoldersEndpointTests
 
         var unknown = new RepositoryFoldersRequest("owner", "repo", RepositoryId: 99999);
         var resultUnknown = await RepositoriesEndpoints.ListRepositoryFolders(
-            unknown, null, user.TelegramId, db, _encryptionService, _gitHubService);
+            unknown,
+            db,
+            _encryptionService,
+            _gitHubService,
+            httpContext: AuthenticatedContext(12345));
 
         var foreign = new RepositoryFoldersRequest("owner", "repo", RepositoryId: foreignRepo.Id);
         var resultForeign = await RepositoriesEndpoints.ListRepositoryFolders(
-            foreign, null, user.TelegramId, db, _encryptionService, _gitHubService);
+            foreign,
+            db,
+            _encryptionService,
+            _gitHubService,
+            httpContext: AuthenticatedContext(12345));
 
         (resultUnknown as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         (resultForeign as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
@@ -202,7 +224,12 @@ public class RepositoryFoldersEndpointTests
 
         var request = new RepositoryFoldersRequest("owner", "repo", GitHubToken: "t");
         var result = await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
         FoldersOf(result).Should().Equal("docs", "inbox", "notes");
@@ -220,7 +247,12 @@ public class RepositoryFoldersEndpointTests
 
         var request = new RepositoryFoldersRequest("owner", "repo", GitHubToken: "t");
         var result = await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         FoldersOf(result).Should().BeEmpty();
     }
@@ -242,7 +274,12 @@ public class RepositoryFoldersEndpointTests
 
         var request = new RepositoryFoldersRequest("owner", "repo", GitHubToken: "fresh_token");
         await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         captured.Should().ContainSingle();
         captured[0].Token.Should().Be("fresh_token");
@@ -265,7 +302,12 @@ public class RepositoryFoldersEndpointTests
 
         var request = new RepositoryFoldersRequest("owner", "repo", RepositoryId: repository.Id);
         await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         captured.Should().ContainSingle();
         captured[0].Token.Should().Be("stored_token");
@@ -287,7 +329,12 @@ public class RepositoryFoldersEndpointTests
         var request = new RepositoryFoldersRequest(
             "owner", "repo", GitHubToken: "fresh_token", RepositoryId: repository.Id);
         await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         captured.Should().ContainSingle();
         captured[0].Token.Should().Be("fresh_token");
@@ -301,8 +348,23 @@ public class RepositoryFoldersEndpointTests
 
         var request = new RepositoryFoldersRequest("owner", "repo", RepositoryId: repository.Id);
         var result = await RepositoriesEndpoints.ListRepositoryFolders(
-            request, null, 12345, db, _encryptionService, _gitHubService);
+            request,
+            db,
+            _encryptionService,
+            _gitHubService,
+            AuthenticatedContext(12345)
+        );
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }

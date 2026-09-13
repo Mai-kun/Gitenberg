@@ -6,12 +6,12 @@ using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Activity;
 using Gitenberg.Web.Features.Notes;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -61,7 +61,6 @@ public class NotesEndpointsTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         ActivityService.EnsureTableCreated(dbContext);
-        ReminderService.EnsureTableCreated(dbContext);
         return dbContext;
     }
 
@@ -110,7 +109,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, null, null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -125,7 +124,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -149,7 +148,7 @@ public class NotesEndpointsTests
         await db.SaveChangesAsync();
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, 12345, null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -183,7 +182,7 @@ public class NotesEndpointsTests
         };
 
         // Act
-        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -220,7 +219,7 @@ public class NotesEndpointsTests
         };
 
         // Act
-        var result = await NotesEndpoints.GetNotes("subfolder", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNotes("subfolder", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -239,7 +238,7 @@ public class NotesEndpointsTests
         _gitHubService.GetNotesFunc = (_, _) => throw new Exception("GitHub API down");
 
         // Act
-        Func<Task> act = () => NotesEndpoints.GetNotes(null, 12345, null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        Func<Task> act = () => NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         await act.Should().ThrowAsync<Exception>().WithMessage("GitHub API down");
@@ -252,7 +251,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.GetNoteContent(null!, 12345, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNoteContent(null!, db, CreateResolver(db), _gitHubService, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -273,12 +272,11 @@ public class NotesEndpointsTests
         // Act
         Func<Task> act = () => NotesEndpoints.GetNoteContent(
             "notes/missing.md",
-            12345,
-            null,
             db,
             CreateResolver(db),
             _gitHubService,
-            CreatePendingSync(db)
+            CreatePendingSync(db),
+            httpContext: AuthenticatedContext(12345)
         );
 
         // Assert
@@ -297,12 +295,11 @@ public class NotesEndpointsTests
         // Act
         var result = await NotesEndpoints.GetNoteContent(
             "notes/note1.md",
-            12345,
-            null,
             db,
             CreateResolver(db),
             _gitHubService,
-            CreatePendingSync(db)
+            CreatePendingSync(db),
+            httpContext: AuthenticatedContext(12345)
         );
 
         // Assert
@@ -332,15 +329,13 @@ public class NotesEndpointsTests
         // Act
         var result = await NotesEndpoints.CreateOrUpdateNote(
             request,
-            12345,
-            null,
             null,
             db,
             CreateResolver(db),
             CreatePendingSync(db),
             _memoryCache,
-            new ReminderService(db),
-            new ActivityService(db)
+            new ActivityService(db),
+            httpContext: AuthenticatedContext(12345)
         );
 
         // Assert
@@ -361,15 +356,13 @@ public class NotesEndpointsTests
         // Act
         var result = await NotesEndpoints.CreateOrUpdateNote(
             request,
-            12345,
-            null,
             null,
             db,
             CreateResolver(db),
             CreatePendingSync(db),
             _memoryCache,
-            new ReminderService(db),
-            new ActivityService(db)
+            new ActivityService(db),
+            httpContext: AuthenticatedContext(12345)
         );
 
         // Assert
@@ -390,7 +383,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await NotesEndpoints.DeleteNote(null!, "msg", 12345, null, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ReminderService(db), new ActivityService(db));
+        var result = await NotesEndpoints.DeleteNote(null!, "msg", null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ActivityService(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -409,15 +402,13 @@ public class NotesEndpointsTests
         var result = await NotesEndpoints.DeleteNote(
             "notes/missing.md",
             "delete msg",
-            12345,
-            null,
             null,
             db,
             CreateResolver(db),
             CreatePendingSync(db),
             _memoryCache,
-            new ReminderService(db),
-            new ActivityService(db)
+            new ActivityService(db),
+            httpContext: AuthenticatedContext(12345)
         );
 
         // Assert - local-first: the delete is queued, not pushed to GitHub.
@@ -441,15 +432,13 @@ public class NotesEndpointsTests
         var result = await NotesEndpoints.DeleteNote(
             "notes/delete.md",
             "delete msg",
-            12345,
-            null,
             null,
             db,
             CreateResolver(db),
             CreatePendingSync(db),
             _memoryCache,
-            new ReminderService(db),
-            new ActivityService(db)
+            new ActivityService(db),
+            httpContext: AuthenticatedContext(12345)
         );
 
         // Assert
@@ -487,9 +476,9 @@ public class NotesEndpointsTests
         };
 
         // Act - First call (should fetch from service and cache)
-        var result1 = await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result1 = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         // Act - Second call (should hit cache)
-        var result2 = await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result2 = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         callCount.Should().Be(1);
@@ -523,15 +512,15 @@ public class NotesEndpointsTests
         _gitHubService.CreateOrUpdateNoteFunc = (_, _, _, _) => Task.CompletedTask;
 
         // 1. First GetNotes (caches data)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         callCount.Should().Be(1);
 
         // 2. Create or Update Note (should bust cache)
         var request = new CreateOrUpdateNoteRequest("notes/new.md", "content", "msg");
-        await NotesEndpoints.CreateOrUpdateNote(request, 12345, null, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ReminderService(db), new ActivityService(db));
+        await NotesEndpoints.CreateOrUpdateNote(request, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ActivityService(db), httpContext: AuthenticatedContext(12345));
 
         // 3. Second GetNotes (should fetch from service again due to cache bust)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         callCount.Should().Be(2);
     }
 
@@ -561,14 +550,14 @@ public class NotesEndpointsTests
         _gitHubService.DeleteNoteFunc = (_, _, _) => Task.CompletedTask;
 
         // 1. First GetNotes (caches data)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         callCount.Should().Be(1);
 
         // 2. Delete Note (should bust cache)
-        await NotesEndpoints.DeleteNote("notes/note1.md", "msg", 12345, null, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ReminderService(db), new ActivityService(db));
+        await NotesEndpoints.DeleteNote("notes/note1.md", "msg", null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ActivityService(db), httpContext: AuthenticatedContext(12345));
 
         // 3. Second GetNotes (should fetch from service again due to cache bust)
-        await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         callCount.Should().Be(2);
     }
 
@@ -640,13 +629,13 @@ public class NotesEndpointsTests
             Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { CreateNote("note1.md") });
 
         // Act - First call caches note1.md
-        await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // GitHub now returns a different note, but the cache should not know about it
         _gitHubService.GetNotesFunc = (_, _) =>
             Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { CreateNote("note2.md") });
 
-        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert
         var valueResult = result as IValueHttpResult;
@@ -669,10 +658,10 @@ public class NotesEndpointsTests
         };
 
         // Act - same paths requested twice
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder1", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
+        await NotesEndpoints.GetNotes("folder2", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
+        await NotesEndpoints.GetNotes("folder1", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
+        await NotesEndpoints.GetNotes("folder2", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert - each distinct path fetched exactly once
         requestedPaths.Should().BeEquivalentTo("folder1", "folder2");
@@ -695,10 +684,10 @@ public class NotesEndpointsTests
         };
 
         // Act - each user requests twice
-        await NotesEndpoints.GetNotes(null, null, 11111, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes(null, null, 11111, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes(null, null, 22222, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes(null, null, 22222, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(11111));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(11111));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(22222));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(22222));
 
         // Assert - each user has an independent cache entry
         callsPerUser[11111].Should().Be(1);
@@ -721,16 +710,16 @@ public class NotesEndpointsTests
         _gitHubService.CreateOrUpdateNoteFunc = (_, _, _, _) => Task.CompletedTask;
 
         // Act - cache both paths, then bust the user's cache via a write operation
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder1", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
+        await NotesEndpoints.GetNotes("folder2", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         callCount.Should().Be(2);
 
         var request = new CreateOrUpdateNoteRequest("notes/new.md", "content", "msg");
-        await NotesEndpoints.CreateOrUpdateNote(request, 12345, null, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ReminderService(db), new ActivityService(db));
+        await NotesEndpoints.CreateOrUpdateNote(request, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ActivityService(db), httpContext: AuthenticatedContext(12345));
 
         // Assert - both cached paths were invalidated
-        await NotesEndpoints.GetNotes("folder1", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes("folder2", null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes("folder1", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
+        await NotesEndpoints.GetNotes("folder2", db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         callCount.Should().Be(4);
     }
 
@@ -760,15 +749,15 @@ public class NotesEndpointsTests
         _gitHubService.CreateOrUpdateNoteFunc = (_, _, _, _) => Task.CompletedTask;
 
         // Act - cache for both users, then write for user1 only
-        await NotesEndpoints.GetNotes(null, null, 11111, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes(null, null, 22222, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(11111));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(22222));
 
         var request = new CreateOrUpdateNoteRequest("notes/new.md", "content", "msg");
-        await NotesEndpoints.CreateOrUpdateNote(request, 11111, null, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ReminderService(db), new ActivityService(db));
+        await NotesEndpoints.CreateOrUpdateNote(request, null, db, CreateResolver(db), CreatePendingSync(db), _memoryCache, new ActivityService(db), httpContext: AuthenticatedContext(11111));
 
         // Assert - user1's cache was busted, user2's was not
-        await NotesEndpoints.GetNotes(null, null, 11111, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
-        await NotesEndpoints.GetNotes(null, null, 22222, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(11111));
+        await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(22222));
         user1Calls.Should().Be(2);
         user2Calls.Should().Be(1);
     }
@@ -783,7 +772,7 @@ public class NotesEndpointsTests
         _gitHubService.GetNotesFunc = (_, _) => throw new Exception("GitHub API down");
 
         // Act - first attempt fails, then the service recovers
-        Func<Task> act = () => NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        Func<Task> act = () => NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
         await act.Should().ThrowAsync<Exception>().WithMessage("GitHub API down");
 
         var callCount = 0;
@@ -792,11 +781,21 @@ public class NotesEndpointsTests
             callCount++;
             return Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { CreateNote("note1.md") });
         };
-        var result = await NotesEndpoints.GetNotes(null, null, 12345, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db));
+        var result = await NotesEndpoints.GetNotes(null, db, CreateResolver(db), _gitHubService, _memoryCache, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         // Assert - the failed attempt was not cached, the recovered call fetched fresh data
         callCount.Should().Be(1);
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult!.StatusCode.Should().Be(StatusCodes.Status200OK);
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }

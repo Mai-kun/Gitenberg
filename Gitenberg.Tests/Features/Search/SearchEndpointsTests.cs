@@ -1,7 +1,6 @@
 using System.Net;
 using FluentAssertions;
 using Gitenberg.Web.Database;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
@@ -9,6 +8,7 @@ using Gitenberg.Tests.Mocks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -80,7 +80,7 @@ public class SearchEndpointsTests
 
     private NoteIndexer CreateIndexer(AppDbContext db)
     {
-        return new NoteIndexer(db, new MockGitHubService(), _encryptionService, new ReminderService(db), NullLogger<NoteIndexer>.Instance);
+        return new NoteIndexer(db, new MockGitHubService(), _encryptionService, NullLogger<NoteIndexer>.Instance);
     }
 
     private static List<NoteSearchResult> GetResultsValue(IResult result)
@@ -97,7 +97,7 @@ public class SearchEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", null, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", db, CreateResolver(db), CreateIndexer(db));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -113,7 +113,7 @@ public class SearchEndpointsTests
         await SeedUserAsync(db, 12345);
 
         // Act
-        var result = await SearchEndpoints.SearchNotes(null, 12345, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes(null, db, CreateResolver(db), CreateIndexer(db), AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -129,7 +129,7 @@ public class SearchEndpointsTests
         await SeedUserAsync(db, 12345);
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("   ", 12345, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("   ", db, CreateResolver(db), CreateIndexer(db), AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -144,7 +144,7 @@ public class SearchEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", db, CreateResolver(db), CreateIndexer(db), AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -166,7 +166,7 @@ public class SearchEndpointsTests
         );
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", db, CreateResolver(db), CreateIndexer(db), AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -190,7 +190,7 @@ public class SearchEndpointsTests
         await InsertFtsRowAsync(db, 12345, "notes/os-basics.md", "A note about completely different topics.");
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", db, CreateResolver(db), CreateIndexer(db), AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -210,7 +210,7 @@ public class SearchEndpointsTests
         await InsertFtsRowAsync(db, 67890, "notes/other-user.md", "Another note about kernel scheduling.");
 
         // Act
-        var result = await SearchEndpoints.SearchNotes("kernel", 12345, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("kernel", db, CreateResolver(db), CreateIndexer(db), AuthenticatedContext(12345));
 
         // Assert
         var statusCodeResult = result as IStatusCodeHttpResult;
@@ -232,9 +232,19 @@ public class SearchEndpointsTests
 
         // Act - an unbalanced quote used to be invalid FTS5 MATCH syntax;
         // the endpoint now sanitizes it away, so the search succeeds with no matches.
-        var result = await SearchEndpoints.SearchNotes("\"", 12345, null, db, CreateResolver(db), CreateIndexer(db));
+        var result = await SearchEndpoints.SearchNotes("\"", db, CreateResolver(db), CreateIndexer(db), AuthenticatedContext(12345));
 
         // Assert
         GetResultsValue(result).Should().BeEmpty();
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }

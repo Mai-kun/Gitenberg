@@ -5,7 +5,6 @@ using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Activity;
 using Gitenberg.Web.Features.Notes;
 using Gitenberg.Web.Features.Pins;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Repositories;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Models;
@@ -13,6 +12,7 @@ using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -47,7 +47,6 @@ public class PinsEndpointsTests
         var dbContext = new AppDbContext(options);
         dbContext.Database.EnsureCreated();
         PendingSyncService.EnsureTableCreated(dbContext);
-        ReminderService.EnsureTableCreated(dbContext);
         ActivityService.EnsureTableCreated(dbContext);
         PinsService.EnsureTableCreated(dbContext);
         Gitenberg.Web.Features.Shares.ShareLinksService.EnsureTableCreated(dbContext);
@@ -108,7 +107,7 @@ public class PinsEndpointsTests
     {
         await using var db = CreateDb();
 
-        var result = await PinsEndpoints.ListPins(null, null, db, CreateResolver(db), new PinsService(db));
+        var result = await PinsEndpoints.ListPins(db, CreateResolver(db), new PinsService(db));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -118,7 +117,7 @@ public class PinsEndpointsTests
     {
         await using var db = CreateDb();
 
-        var result = await PinsEndpoints.ListPins(null, 12345, db, CreateResolver(db), new PinsService(db));
+        var result = await PinsEndpoints.ListPins(db, CreateResolver(db), new PinsService(db), httpContext: AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
@@ -130,7 +129,7 @@ public class PinsEndpointsTests
         db.Users.Add(new User { TelegramId = 12345, CreatedAt = DateTime.UtcNow, LastActivityAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
-        var result = await PinsEndpoints.ListPins(null, 12345, db, CreateResolver(db), new PinsService(db));
+        var result = await PinsEndpoints.ListPins(db, CreateResolver(db), new PinsService(db), httpContext: AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -142,7 +141,7 @@ public class PinsEndpointsTests
         await SeedUserWithRepositoryAsync(db);
         var service = new PinsService(db);
 
-        var result = await PinsEndpoints.PinItem(new PinItemRequest("   "), null, 12345, db, CreateResolver(db), service);
+        var result = await PinsEndpoints.PinItem(new PinItemRequest("   "), db, CreateResolver(db), service, httpContext: AuthenticatedContext(12345));
 
         (result as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -159,16 +158,16 @@ public class PinsEndpointsTests
         var service = new PinsService(db);
         var resolver = CreateResolver(db);
 
-        var pinned = await PinsEndpoints.PinItem(new PinItemRequest("/inbox/today.md/"), null, 12345, db, resolver, service);
+        var pinned = await PinsEndpoints.PinItem(new PinItemRequest("/inbox/today.md/"), db, resolver, service, httpContext: AuthenticatedContext(12345));
         (pinned as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        var list = await PinsEndpoints.ListPins(null, 12345, db, resolver, service);
+        var list = await PinsEndpoints.ListPins(db, resolver, service, httpContext: AuthenticatedContext(12345));
         PinPaths(list).Should().Equal("inbox/today.md");
 
-        var unpinned = await PinsEndpoints.UnpinItem("inbox/today.md", null, 12345, db, resolver, service);
+        var unpinned = await PinsEndpoints.UnpinItem("inbox/today.md", db, resolver, service, httpContext: AuthenticatedContext(12345));
         (unpinned as IStatusCodeHttpResult)!.StatusCode.Should().Be(StatusCodes.Status200OK);
 
-        var empty = await PinsEndpoints.ListPins(null, 12345, db, resolver, service);
+        var empty = await PinsEndpoints.ListPins(db, resolver, service, httpContext: AuthenticatedContext(12345));
         PinPaths(empty).Should().BeEmpty();
     }
 
@@ -186,16 +185,15 @@ public class PinsEndpointsTests
 
         await NotesEndpoints.MoveNote(
             new MoveNoteRequest("inbox/today.md", "work/today.md", null, null),
-            12345,
-            null,
             null,
             db,
             CreateResolver(db),
             CreatePendingSync(db),
             _memoryCache,
-            new ReminderService(db),
             new ActivityService(db),
-            service);
+            service,
+            httpContext: AuthenticatedContext(12345)
+        );
 
         (await service.ListAsync(12345, 1)).Select(p => p.ItemPath).Should().Equal("work/today.md");
     }
@@ -212,16 +210,15 @@ public class PinsEndpointsTests
         await NotesEndpoints.DeleteNote(
             "notes/deleted",
             null,
-            12345,
-            null,
             null,
             db,
             CreateResolver(db),
             CreatePendingSync(db),
             _memoryCache,
-            new ReminderService(db),
             new ActivityService(db),
-            service);
+            service,
+            httpContext: AuthenticatedContext(12345)
+        );
 
         (await service.ListAsync(12345, 1)).Select(p => p.ItemPath).Should().Equal("notes/keep.md");
     }
@@ -251,7 +248,7 @@ public class PinsEndpointsTests
         await service.PinAsync(12345, first.Id, "inbox/first.md");
         await service.PinAsync(12345, second.Id, "inbox/second.md");
 
-        await RepositoriesEndpoints.DeleteRepository(first.Id, null, 12345, db);
+        await RepositoriesEndpoints.DeleteRepository(first.Id, db, httpContext: AuthenticatedContext(12345));
 
         (await service.ListAsync(12345, first.Id)).Should().BeEmpty();
         (await service.ListAsync(12345, second.Id)).Select(p => p.ItemPath).Should().Equal("inbox/second.md");
@@ -262,4 +259,14 @@ public class PinsEndpointsTests
         PendingSyncService.EnsureTableCreated(db);
         return new PendingSyncService(db);
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }

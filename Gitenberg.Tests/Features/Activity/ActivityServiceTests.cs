@@ -74,4 +74,42 @@ public class ActivityServiceTests
 
         heatmap.Should().ContainSingle(d => d.Date == recent && d.Count == 3);
     }
+
+    [Fact]
+    public async Task GetHeatmapAsync_ExplicitRangeReturnsOnlyDaysInside()
+    {
+        var db = CreateDb();
+        var service = new ActivityService(db);
+        var uid = "42";
+
+        const string inRange = "2026-05-10";
+        const string afterRange = "2026-05-20";
+        const string beforeRange = "2026-04-01";
+        foreach (var (day, count) in new[] { (inRange, 2), (afterRange, 4), (beforeRange, 7) })
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO ActivityDays (TelegramUserId, ActivityDate, Count) VALUES ({uid}, {day}, {count})");
+        }
+
+        var heatmap = await service.GetHeatmapAsync(
+            42, -180, from: new DateOnly(2026, 5, 1), to: new DateOnly(2026, 5, 15));
+
+        heatmap.Should().ContainSingle(d => d.Date == inRange && d.Count == 2);
+    }
+
+    [Fact]
+    public async Task GetHeatmapAsync_ExplicitRangeMayReachPastTheDefaultWindow()
+    {
+        var db = CreateDb();
+        var service = new ActivityService(db);
+        var uid = "42";
+
+        var ancient = DateTime.UtcNow.AddDays(-400).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO ActivityDays (TelegramUserId, ActivityDate, Count) VALUES ({uid}, {ancient}, 9)");
+
+        var heatmap = await service.GetHeatmapAsync(42, -180, from: new DateOnly(2020, 1, 1), to: new DateOnly(2030, 1, 1));
+
+        heatmap.Should().ContainSingle(d => d.Date == ancient && d.Count == 9);
+    }
 }

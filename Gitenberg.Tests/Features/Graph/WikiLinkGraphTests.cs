@@ -154,8 +154,8 @@ public class WikiLinkGraphTests
     {
         var targets = WikiLinkGraph.ExtractTargets("x [[ Note .md | label ]] and [[a/b.md]]");
 
-        targets.Should().Equal("Note", "a/b").Because(
-            "the '.md' suffix and surrounding whitespace are trimmed, interior spaces stay part of the name");
+        targets.Should().Equal(new[] { "Note", "a/b" },
+            because: "the '.md' suffix and surrounding whitespace are trimmed, interior spaces stay part of the name");
     }
 
     [Fact]

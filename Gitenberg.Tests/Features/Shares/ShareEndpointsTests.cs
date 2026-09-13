@@ -5,13 +5,13 @@ using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Shares;
 using Gitenberg.Web.Features.Sync;
-using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Gitenberg.Web.Features.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,15 +29,13 @@ public class ShareEndpointsTests
     private readonly TokenEncryptionService _encryptionService;
     private readonly MockGitHubService _gitHubService;
     private readonly ShareConfiguration _shareConfig;
-    private readonly BotConfiguration _botConfig;
 
     public ShareEndpointsTests()
     {
         var provider = new EphemeralDataProtectionProvider();
         _encryptionService = new TokenEncryptionService(provider);
         _gitHubService = new MockGitHubService();
-        _shareConfig = new ShareConfiguration();
-        _botConfig = new BotConfiguration { HostAddress = "https://gitenberg.example" };
+        _shareConfig = new ShareConfiguration { PublicBaseUrl = "https://gitenberg.example" };
     }
 
     private static AppDbContext CreateInMemoryDbContext()
@@ -112,8 +110,13 @@ public class ShareEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         var result = await ShareEndpoints.CreateShareLink(
-            new ShareNoteRequest("notes/a.md"), null, null, db, CreateResolver(db), _gitHubService,
-            new PendingSyncService(db), CreateShareLinks(db), _shareConfig, _botConfig);
+            new ShareNoteRequest("notes/a.md"),
+            db,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            CreateShareLinks(db),
+            _shareConfig );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -125,8 +128,15 @@ public class ShareEndpointsTests
         await CreateUserAsync(db, 12345);
 
         var result = await ShareEndpoints.CreateShareLink(
-            new ShareNoteRequest("   "), null, 12345, db, CreateResolver(db), _gitHubService,
-            new PendingSyncService(db), CreateShareLinks(db), _shareConfig, _botConfig);
+            new ShareNoteRequest("   "),
+            db,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            CreateShareLinks(db),
+            _shareConfig,
+            AuthenticatedContext(12345)
+        );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status400BadRequest);
     }
@@ -137,8 +147,15 @@ public class ShareEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         var result = await ShareEndpoints.CreateShareLink(
-            new ShareNoteRequest("notes/a.md"), null, 12345, db, CreateResolver(db), _gitHubService,
-            new PendingSyncService(db), CreateShareLinks(db), _shareConfig, _botConfig);
+            new ShareNoteRequest("notes/a.md"),
+            db,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            CreateShareLinks(db),
+            _shareConfig,
+            AuthenticatedContext(12345)
+        );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status404NotFound);
     }
@@ -151,8 +168,15 @@ public class ShareEndpointsTests
         _gitHubService.GetNoteContentFunc = (_, _) => throw new NotFoundException("not found", HttpStatusCode.NotFound);
 
         var result = await ShareEndpoints.CreateShareLink(
-            new ShareNoteRequest("notes/missing.md"), null, 12345, db, CreateResolver(db), _gitHubService,
-            new PendingSyncService(db), CreateShareLinks(db), _shareConfig, _botConfig);
+            new ShareNoteRequest("notes/missing.md"),
+            db,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            CreateShareLinks(db),
+            _shareConfig,
+            AuthenticatedContext(12345)
+        );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status404NotFound);
     }
@@ -166,11 +190,25 @@ public class ShareEndpointsTests
 
         var shareLinks = CreateShareLinks(db);
         var first = await ShareEndpoints.CreateShareLink(
-            new ShareNoteRequest("notes/hello.md"), null, 12345, db, CreateResolver(db), _gitHubService,
-            new PendingSyncService(db), shareLinks, _shareConfig, _botConfig);
+            new ShareNoteRequest("notes/hello.md"),
+            db,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            shareLinks,
+            _shareConfig,
+            AuthenticatedContext(12345)
+        );
         var second = await ShareEndpoints.CreateShareLink(
-            new ShareNoteRequest("notes/hello.md"), null, 12345, db, CreateResolver(db), _gitHubService,
-            new PendingSyncService(db), shareLinks, _shareConfig, _botConfig);
+            new ShareNoteRequest("notes/hello.md"),
+            db,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            shareLinks,
+            _shareConfig,
+            AuthenticatedContext(12345)
+        );
 
         StatusCodeOf(first).Should().Be(StatusCodes.Status200OK);
         StatusCodeOf(second).Should().Be(StatusCodes.Status200OK);
@@ -201,8 +239,15 @@ public class ShareEndpointsTests
         };
 
         var result = await ShareEndpoints.CreateShareLink(
-            new ShareNoteRequest("notes/draft.md"), null, 12345, db, CreateResolver(db), _gitHubService,
-            pendingSync, CreateShareLinks(db), _shareConfig, _botConfig);
+            new ShareNoteRequest("notes/draft.md"),
+            db,
+            CreateResolver(db),
+            _gitHubService,
+            pendingSync,
+            CreateShareLinks(db),
+            _shareConfig,
+            AuthenticatedContext(12345)
+        );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status200OK);
         gitHubCalled.Should().BeFalse("a queued local save is the note the user sees");
@@ -219,7 +264,13 @@ public class ShareEndpointsTests
         await CreateUserAsync(db, 12345);
 
         var result = await ShareEndpoints.GetShareLink(
-            "notes/a.md", null, 12345, db, CreateResolver(db), CreateShareLinks(db), _shareConfig, _botConfig);
+            "notes/a.md",
+            db,
+            CreateResolver(db),
+            CreateShareLinks(db),
+            _shareConfig,
+            AuthenticatedContext(12345)
+        );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status404NotFound);
     }
@@ -232,7 +283,7 @@ public class ShareEndpointsTests
         var shareLinks = CreateShareLinks(db);
         var link = await shareLinks.CreateOrGetAsync(12345, 1, "notes/a.md");
 
-        var result = await ShareEndpoints.RevokeShareLink(link.Token, null, 999, db, shareLinks);
+        var result = await ShareEndpoints.RevokeShareLink(link.Token, db, shareLinks, AuthenticatedContext(999));
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status404NotFound);
     }
@@ -245,7 +296,7 @@ public class ShareEndpointsTests
         var shareLinks = CreateShareLinks(db);
         var link = await shareLinks.CreateOrGetAsync(12345, 1, "notes/a.md");
 
-        var result = await ShareEndpoints.RevokeShareLink(link.Token, null, 12345, db, shareLinks);
+        var result = await ShareEndpoints.RevokeShareLink(link.Token, db, shareLinks, AuthenticatedContext(12345));
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status200OK);
         (await shareLinks.GetByTokenAsync(link.Token)).Should().BeNull();
@@ -261,7 +312,12 @@ public class ShareEndpointsTests
         await using var db = CreateInMemoryDbContext();
 
         var result = await ShareEndpoints.GetSharedContent(
-            "no-such-token", CreateResolver(db), _gitHubService, new PendingSyncService(db), CreateShareLinks(db));
+            "no-such-token",
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            CreateShareLinks(db)
+        );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status404NotFound);
     }
@@ -276,7 +332,11 @@ public class ShareEndpointsTests
         await shareLinks.RevokeAsync(12345, link.Token);
 
         var result = await ShareEndpoints.GetSharedContent(
-            link.Token, CreateResolver(db), _gitHubService, new PendingSyncService(db), shareLinks);
+            link.Token,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            shareLinks );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status404NotFound);
     }
@@ -296,7 +356,11 @@ public class ShareEndpointsTests
         var link = await shareLinks.CreateOrGetAsync(12345, 1, "notes/idea.md");
 
         var result = await ShareEndpoints.GetSharedContent(
-            link.Token, CreateResolver(db), _gitHubService, new PendingSyncService(db), shareLinks);
+            link.Token,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            shareLinks );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status200OK);
         var value = (result as IValueHttpResult)!.Value;
@@ -314,7 +378,11 @@ public class ShareEndpointsTests
         var link = await shareLinks.CreateOrGetAsync(12345, 1, "notes/deleted.md");
 
         var result = await ShareEndpoints.GetSharedContent(
-            link.Token, CreateResolver(db), _gitHubService, new PendingSyncService(db), shareLinks);
+            link.Token,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            shareLinks );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status404NotFound);
     }
@@ -332,7 +400,11 @@ public class ShareEndpointsTests
         var link = await shareLinks.CreateOrGetAsync(12345, 1, "notes/a.md");
 
         var result = await ShareEndpoints.GetSharedContent(
-            link.Token, CreateResolver(db), _gitHubService, pendingSync, shareLinks);
+            link.Token,
+            CreateResolver(db),
+            _gitHubService,
+            pendingSync,
+            shareLinks );
 
         StatusCodeOf(result).Should().Be(StatusCodes.Status200OK);
         PropString((result as IValueHttpResult)!.Value, "Content")
@@ -370,7 +442,11 @@ public class ShareEndpointsTests
         var shareLinks = CreateShareLinks(db);
         var link = await shareLinks.CreateOrGetAsync(12345, 1, "notes/a.md");
         await ShareEndpoints.GetSharedContent(
-            link.Token, CreateResolver(db), _gitHubService, new PendingSyncService(db), shareLinks);
+            link.Token,
+            CreateResolver(db),
+            _gitHubService,
+            new PendingSyncService(db),
+            shareLinks );
 
         usedToken.Should().Be("pat_first", "a share link is pinned to the repository it was created for");
     }
@@ -423,4 +499,14 @@ public class ShareEndpointsTests
         public string WebRootPath { get; set; } = string.Empty;
         public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
     }
+
+    // WebAuthFilter sets this Items entry for authenticated requests; the
+    // handlers resolve the caller through it.
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
+    }
+
 }
