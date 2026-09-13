@@ -55,7 +55,7 @@ export function collectHeadingsFromPreview() {
 
 // The list source follows the current editor surface: the rendered preview
 // when it is open, the raw markdown otherwise. Every item carries its jump().
-// Jumping is instant on purpose: some WebViews (this app's Telegram guests
+// Jumping is instant on purpose: some WebViews
 // included) silently drop behavior:'smooth' programmatic scrolls, which would
 // make a tap feel dead.
 function tocItems() {

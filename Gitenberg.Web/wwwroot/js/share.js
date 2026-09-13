@@ -1,6 +1,6 @@
 // Public share page: renders the note behind a /share/{token} link in
 // read-only mode, using the same preview pipeline as the Mini App editor.
-// No Telegram SDK, no authentication — the unguessable token is the credential.
+// No authentication — the unguessable token is the credential.
 
 import { renderMarkdownPipeline } from './md-preview.js';
 import { initI18n, t } from './i18n.js';
