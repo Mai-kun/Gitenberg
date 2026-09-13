@@ -30,6 +30,89 @@
   --space-5: 24px;
 }
 
+/* ==========================================================================
+   Fixed themes (Settings → Appearance). A theme overrides the Telegram
+   variables wholesale, so every component built on --tg-* follows it; the
+   attribute selector (0,2,0) also beats the prefers-color-scheme block that
+   recolors the heatmap, letting each palette carry its own --hm-* ramp.
+   ========================================================================== */
+
+:root[data-theme="light"] {
+  --tg-bg: #ffffff;
+  --tg-text: #222222;
+  --tg-hint: #999999;
+  --tg-link: #2481cc;
+  --tg-button: #2481cc;
+  --tg-button-text: #ffffff;
+  --tg-secondary: #f0f0f0;
+  --tg-header: #f0f0f0;
+  --tg-accent: #2481cc;
+  --tg-destructive: #e53935;
+  --tg-section-sep: #e0e0e0;
+  --hm-0: #ebedf0;
+  --hm-1: #9be9a8;
+  --hm-2: #40c463;
+  --hm-3: #30a14e;
+  --hm-4: #216e39;
+}
+
+:root[data-theme="dark"] {
+  --tg-bg: #17212b;
+  --tg-text: #eef3f7;
+  --tg-hint: #8b98a5;
+  --tg-link: #6ab3f3;
+  --tg-button: #5288c1;
+  --tg-button-text: #ffffff;
+  --tg-secondary: #232e3c;
+  --tg-header: #232e3c;
+  --tg-accent: #6ab3f3;
+  --tg-destructive: #ef5350;
+  --tg-section-sep: #101921;
+  --hm-0: #1c2128;
+  --hm-1: #0e4429;
+  --hm-2: #006d32;
+  --hm-3: #26a641;
+  --hm-4: #39d353;
+}
+
+:root[data-theme="sepia"] {
+  --tg-bg: #f6edda;
+  --tg-text: #4e3d2c;
+  --tg-hint: #9c8465;
+  --tg-link: #8c5e24;
+  --tg-button: #a4793b;
+  --tg-button-text: #fdf6e3;
+  --tg-secondary: #ece0c4;
+  --tg-header: #ece0c4;
+  --tg-accent: #8c5e24;
+  --tg-destructive: #b03a2e;
+  --tg-section-sep: #ddcba6;
+  --hm-0: #e8dcbc;
+  --hm-1: #c9b988;
+  --hm-2: #a89355;
+  --hm-3: #7f6d38;
+  --hm-4: #5c4e26;
+}
+
+:root[data-theme="nord"] {
+  --tg-bg: #2e3440;
+  --tg-text: #eceff4;
+  --tg-hint: #9aa4b8;
+  --tg-link: #88c0d0;
+  --tg-button: #81a1c1;
+  --tg-button-text: #2e3440;
+  --tg-secondary: #3b4252;
+  --tg-header: #3b4252;
+  --tg-accent: #88c0d0;
+  --tg-destructive: #bf616a;
+  --tg-section-sep: #434c5e;
+  --hm-0: #3b4252;
+  --hm-1: #466087;
+  --hm-2: #5e81ac;
+  --hm-3: #81a1c1;
+  --hm-4: #88c0d0;
+}
+
 * { box-sizing: border-box; }
 
 html, body {

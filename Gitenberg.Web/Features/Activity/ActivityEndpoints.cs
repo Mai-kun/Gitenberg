@@ -24,10 +24,17 @@ public static class ActivityEndpoints
         [FromHeader(Name = "X-Timezone-Offset")] int? timezoneOffset,
         [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromQuery(Name = "telegramId")] long? queryTelegramId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
         AppDbContext dbContext,
         HttpContext? httpContext = null
     )
     {
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+        {
+            return Results.BadRequest(new { Error = "'from' must not be later than 'to'." });
+        }
+
         var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
         if (telegramId == null)
         {
@@ -37,7 +44,7 @@ public static class ActivityEndpoints
         }
 
         var service = new ActivityService(dbContext);
-        var days = await service.GetHeatmapAsync(telegramId.Value, timezoneOffset);
+        var days = await service.GetHeatmapAsync(telegramId.Value, timezoneOffset, from: from, to: to);
         return Results.Ok(new { Days = days, Total = days.Sum(d => d.Count) });
     }
 }
