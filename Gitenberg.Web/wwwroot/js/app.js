@@ -137,6 +137,18 @@ const els = {
   explorerTitle: $('explorer-title'),
   btnCreateNote: $('btn-create-note'),
   fabCreate: $('fab-create'),
+  btnTemplates: $('btn-templates'),
+  fabTemplates: $('fab-templates'),
+  templatesModal: $('templates-modal'),
+  templatesList: $('templates-list'),
+  templatesTitleField: $('templates-title-field'),
+  templatesNoteTitle: $('templates-note-title'),
+  templatesPreview: $('templates-preview'),
+  templatesError: $('templates-error'),
+  templatesCreate: $('templates-create'),
+  templatesSeed: $('templates-seed'),
+  templatesClose: $('templates-close'),
+  templatesBackdrop: $('templates-backdrop'),
   breadcrumbs: $('breadcrumbs'),
   searchInput: $('search-input'),
   searchClear: $('search-clear'),
@@ -267,6 +279,7 @@ const state = {
   sharePath: null, // note path shown in the share sheet
   shareToken: null, // active token of the share sheet (null after revoke)
   folderSuggestions: { key: null, folders: [] }, // cached per owner/repo/token source
+  templates: { seq: 0, items: [], selectedPath: null }, // templates sheet state
   currentTab: 'notes', // 'notes' | 'tasks' (root-level tab switch)
   tasks: [], // aggregated checklist from GET /api/notes/tasks
   tasksFilter: 'active', // 'active' | 'all'
@@ -1289,6 +1302,7 @@ function showTab(tab) {
   els.tasksToolbar.hidden = notes || !atRoot;
   els.tasksList.hidden = notes || !atRoot;
   els.fabCreate.hidden = !notes;
+  els.fabTemplates.hidden = !notes;
   if (!notes && atRoot) void loadTasks();
 }
 
@@ -1574,7 +1588,7 @@ function updatePreviewBanner() {
   els.previewBanner.hidden = !editor.isPreviewActive();
 }
 
-function openEditor(mode, path) {
+function openEditor(mode, path, draft = null) {
   state.editor = { mode, path: path ?? null, originalContent: null };
   els.editorTitle.textContent = mode === 'edit'
     ? path.split('/').pop()
@@ -1582,7 +1596,9 @@ function openEditor(mode, path) {
   els.btnEditorDelete.hidden = mode !== 'edit';
   // Sharing needs a saved note: a brand-new draft has nothing to share yet.
   els.btnEditorShare.hidden = mode !== 'edit';
-  els.notePath.value = mode === 'edit' ? path : suggestNewPath();
+  // A template draft arrives with its own suggested file name; otherwise a
+  // generic one is proposed for the current folder.
+  els.notePath.value = mode === 'edit' ? path : (draft?.path ?? suggestNewPath());
   setError(els.editorStatus, '');
 
   showView('editor');
@@ -1600,7 +1616,7 @@ function openEditor(mode, path) {
     editor.clear();
     void loadNoteIntoEditor(path);
   } else {
-    editor.setValue('');
+    editor.setValue(draft?.content ?? '');
     editor.get(); // ensure instance exists before user types
   }
   // The EasyMDE instance is reused across notes — if the previous session
@@ -1752,6 +1768,190 @@ async function saveCurrentNote() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Note templates: a structured note built from templates/<name>.md. The sheet
+// lists the folder, substitutes {{date}} / {{time}} / {{title}} and hands the
+// result to the editor as a regular unsaved draft.
+// ---------------------------------------------------------------------------
+
+function applyTemplateVariables(template, title, now = new Date()) {
+  const date = localDateKey(now);
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return String(template ?? '').replace(/\{\{\s*(date|time|title)\s*\}\}/gi, (_, name) => {
+    const key = name.toLowerCase();
+    if (key === 'date') return date;
+    if (key === 'time') return time;
+    return title;
+  });
+}
+
+// Characters GitHub rejects in paths (the Windows-reserved set) plus control
+// characters; everything else, including Cyrillic, is kept readable.
+function sanitizeNoteTitle(raw) {
+  return String(raw ?? '')
+    .replace(/[\u0000-\u001f]/g, ' ')
+    .replace(/[/\\:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[.\s]+|[.\s]+$/g, '')
+    .slice(0, 100)
+    .trim();
+}
+
+function openTemplatesModal() {
+  state.templates.seq += 1; // invalidate any in-flight load
+  state.templates.selectedPath = null;
+  els.templatesList.textContent = '';
+  els.templatesTitleField.hidden = true;
+  els.templatesPreview.hidden = true;
+  els.templatesCreate.hidden = true;
+  els.templatesSeed.hidden = true;
+  els.templatesNoteTitle.value = '';
+  setError(els.templatesError, '');
+  els.templatesModal.hidden = false;
+  haptic('select');
+  void loadTemplatesList();
+}
+
+function closeTemplatesModal() {
+  els.templatesModal.hidden = true;
+  state.templates.seq += 1;
+  state.templates.selectedPath = null;
+}
+
+async function loadTemplatesList() {
+  const seq = ++state.templates.seq;
+  els.templatesList.textContent = '';
+  const loading = document.createElement('div');
+  loading.className = 'link-empty';
+  loading.textContent = STRINGS.loading;
+  els.templatesList.append(loading);
+
+  try {
+    const items = await api.listTemplates();
+    if (els.templatesModal.hidden || seq !== state.templates.seq) return;
+    state.templates.items = Array.isArray(items) ? items : [];
+    renderTemplatesList();
+  } catch (error) {
+    if (els.templatesModal.hidden || seq !== state.templates.seq) return;
+    els.templatesList.textContent = '';
+    const failed = document.createElement('div');
+    failed.className = 'link-empty';
+    failed.textContent = STRINGS.templatesLoadFailed;
+    els.templatesList.append(failed);
+    showErrorToast(error);
+  }
+}
+
+function renderTemplatesList() {
+  const items = state.templates.items;
+  els.templatesList.textContent = '';
+
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'link-empty';
+    empty.textContent = STRINGS.templatesEmpty;
+    els.templatesList.append(empty);
+    els.templatesSeed.hidden = false;
+    return;
+  }
+
+  for (const item of items) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'link-result template-row';
+    row.dataset.path = item.path;
+    if (item.path === state.templates.selectedPath) row.classList.add('is-selected');
+
+    const name = document.createElement('span');
+    name.className = 'link-result-name';
+    name.textContent = item.name || item.path;
+
+    const vars = document.createElement('span');
+    vars.className = 'link-result-dir';
+    const hasVars = /\{\{\s*(date|time|title)\s*\}\}/i.test(String(item.content ?? ''));
+    vars.textContent = hasVars ? '{{…}}' : '';
+
+    row.append(name, vars);
+    row.addEventListener('click', () => selectTemplate(item));
+    els.templatesList.append(row);
+  }
+}
+
+function selectTemplate(item) {
+  state.templates.selectedPath = item.path;
+  els.templatesList.querySelectorAll('.template-row').forEach((row) => {
+    row.classList.toggle('is-selected', row.dataset.path === item.path);
+  });
+  els.templatesTitleField.hidden = false;
+  els.templatesNoteTitle.value = item.name || '';
+  els.templatesCreate.hidden = false;
+  setError(els.templatesError, '');
+  haptic('select');
+  renderTemplatePreview();
+  els.templatesNoteTitle.focus();
+}
+
+function renderTemplatePreview() {
+  const item = state.templates.items.find((x) => x.path === state.templates.selectedPath);
+  if (!item) {
+    els.templatesPreview.hidden = true;
+    return;
+  }
+  const title = els.templatesNoteTitle.value.trim() || item.name || '';
+  els.templatesPreview.textContent = applyTemplateVariables(item.content, title);
+  els.templatesPreview.hidden = false;
+}
+
+async function createFromTemplate() {
+  const item = state.templates.items.find((x) => x.path === state.templates.selectedPath);
+  if (!item) return;
+
+  const rawTitle = els.templatesNoteTitle.value.trim();
+  if (!sanitizeNoteTitle(rawTitle)) {
+    setError(els.templatesError, STRINGS.templatesNameRequired);
+    haptic('error');
+    return;
+  }
+
+  const base = sanitizeNoteTitle(rawTitle) || STRINGS.templatesFallbackName;
+  const fileName = /\.md$/i.test(base) ? base : `${base}.md`;
+  const prefix = state.currentPath ? `${state.currentPath}/` : '';
+  const content = applyTemplateVariables(item.content, rawTitle);
+
+  closeTemplatesModal();
+  openEditor('create', null, { path: `${prefix}${fileName}`, content });
+}
+
+// One-tap bootstrap: saves a small set of example templates into templates/.
+// Saves are local-first, and the templates endpoint overlays pending ops, so
+// the list below is current immediately without waiting for the sync.
+async function seedDefaultTemplates() {
+  setButtonBusy(els.templatesSeed, true, STRINGS.templatesSeedBusy, STRINGS.templatesSeedBusy);
+  try {
+    for (const seed of t('templateSeeds')) {
+      await api.saveNote(`templates/${seed.name}`, seed.content);
+    }
+    invalidateCaches();
+    void refreshSyncBadge();
+    haptic('success');
+    showToast(STRINGS.templatesSeedDone);
+    els.templatesSeed.hidden = true;
+    await loadTemplatesList();
+  } catch (error) {
+    showErrorToast(error);
+  } finally {
+    setButtonBusy(els.templatesSeed, false, STRINGS.templatesSeedBusy, STRINGS.templatesSeed);
+  }
+}
+
+els.btnTemplates.addEventListener('click', openTemplatesModal);
+els.fabTemplates.addEventListener('click', openTemplatesModal);
+els.templatesClose.addEventListener('click', closeTemplatesModal);
+els.templatesBackdrop.addEventListener('click', closeTemplatesModal);
+els.templatesCreate.addEventListener('click', () => void createFromTemplate());
+els.templatesSeed.addEventListener('click', () => void seedDefaultTemplates());
+els.templatesNoteTitle.addEventListener('input', renderTemplatePreview);
+
 function openInfoModal(item, isDir) {
   state.infoItem = item;
   state.infoItemIsDir = isDir;
@@ -1822,6 +2022,7 @@ document.addEventListener('keydown', (event) => {
   if (!els.shareModal.hidden) closeShareModal();
   // History sits on top of the properties sheet — close it first.
   else if (!els.historyModal.hidden) closeHistoryModal();
+  else if (!els.templatesModal.hidden) closeTemplatesModal();
   else if (!els.infoModal.hidden) closeInfoModal();
 });
 

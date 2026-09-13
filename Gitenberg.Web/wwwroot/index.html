@@ -107,6 +107,13 @@
           <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
       </button>
+      <button id="btn-templates" class="icon-btn" data-i18n-title="templatesBtnTitle" aria-label="Создать по шаблону" title="Создать по шаблону">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+          <path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>
+        </svg>
+      </button>
       <button id="btn-create-note" class="icon-btn" data-i18n-title="createNote" aria-label="Создать заметку" title="Создать заметку">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M12 5v14M5 12h14"/>
@@ -179,6 +186,13 @@
     </div>
     <main id="tasks-list" class="tasks-list" hidden></main>
 
+    <button id="fab-templates" class="fab fab-secondary" data-i18n-title="templatesBtnTitle" aria-label="Создать по шаблону" hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/>
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>
+      </svg>
+    </button>
     <button id="fab-create" class="fab" data-i18n-title="createNote" aria-label="Создать заметку">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M12 5v14M5 12h14"/>
@@ -475,6 +489,30 @@
         </button>
       </div>
       <div id="search-modal-results"></div>
+    </div>
+  </div>
+
+  <!-- ============ Templates sheet: create a note from templates/ ============ -->
+  <div id="templates-modal" class="info-modal" hidden>
+    <div id="templates-backdrop" class="info-backdrop"></div>
+    <div class="info-sheet" role="dialog" aria-modal="true" aria-labelledby="templates-title">
+      <h2 id="templates-title" data-i18n="templatesTitle">Создать по шаблону</h2>
+      <p class="settings-hint" data-i18n="templatesHint">Шаблоны берутся из папки templates/ вашего репозитория. Переменные {{date}}, {{time}} и {{title}} подставляются автоматически.</p>
+      <div id="templates-list" class="link-results"></div>
+      <div class="field" id="templates-title-field" hidden>
+        <label for="templates-note-title" data-i18n="templatesNameLabel">Название заметки</label>
+        <input id="templates-note-title" type="text" autocomplete="off">
+      </div>
+      <pre id="templates-preview" class="templates-preview" hidden></pre>
+      <div id="templates-error" class="error-text" hidden></div>
+      <button id="templates-create" type="button" class="btn btn-primary" hidden>
+        <span class="btn-label" data-i18n="templatesCreate">Создать</span>
+      </button>
+      <button id="templates-seed" type="button" class="btn btn-secondary" hidden>
+        <span class="btn-label" data-i18n="templatesSeed">Создать примеры шаблонов</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+      <button id="templates-close" type="button" class="btn btn-secondary" data-i18n="cancel">Отмена</button>
     </div>
   </div>
 

@@ -9,6 +9,7 @@ using Gitenberg.Web.Features.Repositories;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.Shares;
 using Gitenberg.Web.Features.Sync;
+using Gitenberg.Web.Features.Templates;
 using Gitenberg.Web.Features.Tasks;
 using Gitenberg.Web.Features.TelegramBot;
 using Gitenberg.Web.Features.TelegramBot.Auth;
@@ -153,6 +154,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.MapNotesEndpoints();
 app.MapHistoryEndpoints();
+app.MapTemplatesEndpoints();
 app.MapRegistrationEndpoints();
 app.MapRepositoriesEndpoints();
 app.MapBotEndpoints();
