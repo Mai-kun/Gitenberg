@@ -1975,3 +1975,71 @@ input[type="checkbox"] {
 .btn-danger-text {
   color: var(--app-destructive);
 }
+
+/* ============ Link graph view ============ */
+
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+}
+
+.graph-stats {
+  font-size: 12.5px;
+  color: var(--app-hint);
+}
+
+.graph-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
+}
+
+#graph-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Canvas gestures are handled manually: pan / pinch / node drag. */
+  touch-action: none;
+  cursor: grab;
+}
+
+#graph-canvas.is-panning {
+  cursor: grabbing;
+}
+
+#graph-canvas.node-hover {
+  cursor: pointer;
+}
+
+.graph-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--app-hint);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.graph-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  padding: 0 12px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--app-hint);
+  pointer-events: none;
+  opacity: 0.85;
+}
+

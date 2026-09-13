@@ -225,6 +225,14 @@ const DICT = {
       ['Dataview-запросы', '```dataview … ``` — LIST и TABLE с FROM #тег / FROM "папка"'],
       ['Kanban-доска', '```kanban … ``` или frontmatter kanban-plugin: board — колонки ## и карточки - [ ]'],
     ],
+    graphTitle: 'Граф связей',
+    graphFilterOrphans: 'Только одиночки',
+    graphHint: 'Тяните узлы и холст, колесо или щипок — масштаб, клик по узлу — открыть заметку',
+    graphEmpty: 'Заметок пока нет — граф появится, как только вы что-нибудь напишете.',
+    graphStats: (n, l, o) => `${n} ${plural(n, 'заметка', 'заметки', 'заметок')} · ${l} ${plural(l, 'связь', 'связи', 'связей')} · ${o} ${plural(o, 'одиночка', 'одиночки', 'одиночек')}`,
+    graphLegendNote: 'Заметка',
+    graphLegendOrphan: 'Одиночка — без связей',
+    graphLegendLink: 'Связь [[wiki]]',
   },
 
   en: {
@@ -447,6 +455,14 @@ const DICT = {
       ['Dataview queries', '```dataview … ``` — LIST and TABLE with FROM #tag / FROM "folder"'],
       ['Kanban board', '```kanban … ``` or frontmatter kanban-plugin: board — ## columns and - [ ] cards'],
     ],
+    graphTitle: 'Link graph',
+    graphFilterOrphans: 'Orphans only',
+    graphHint: 'Drag nodes and the canvas, scroll or pinch to zoom, click a node to open the note',
+    graphEmpty: 'No notes yet — the graph appears as soon as you write something.',
+    graphStats: (n, l, o) => `${n} notes · ${l} links · ${o} orphans`,
+    graphLegendNote: 'Note',
+    graphLegendOrphan: 'Orphan — no links',
+    graphLegendLink: '[[wiki]] link',
   },
 };
 
