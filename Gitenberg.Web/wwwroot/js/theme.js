@@ -5,7 +5,10 @@
 
 const STORAGE_KEY = 'gitenberg.theme';
 
-export const THEMES = ['auto', 'light', 'dark', 'sepia', 'nord'];
+export const THEMES = [
+  'auto', 'light', 'dark', 'sepia', 'nord',
+  'dracula', 'solar-light', 'solar-dark', 'black',
+];
 
 // Background color handed to the Telegram header/body chrome so the native
 // UI around the Mini App matches the chosen palette.
@@ -14,6 +17,10 @@ const CHROME_BG = {
   dark: '#17212b',
   sepia: '#f6edda',
   nord: '#2e3440',
+  dracula: '#282a36',
+  'solar-light': '#fdf6e3',
+  'solar-dark': '#002b36',
+  black: '#000000',
 };
 
 export function getTheme() {
@@ -22,7 +29,7 @@ export function getTheme() {
 }
 
 export function isDarkTheme(id) {
-  if (id === 'dark' || id === 'nord') return true;
+  if (id === 'dark' || id === 'nord' || id === 'dracula' || id === 'solar-dark' || id === 'black') return true;
   if (id !== 'auto') return false;
   const colorScheme = window.Telegram?.WebApp?.colorScheme;
   if (colorScheme === 'dark' || colorScheme === 'light') return colorScheme === 'dark';
