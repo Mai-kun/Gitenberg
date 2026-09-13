@@ -1,6 +1,6 @@
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Features.Sync;
-using Gitenberg.Web.Features.TelegramBot.Auth;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +17,7 @@ public static class TemplatesEndpoints
     {
         var group = app.MapGroup("/api/templates")
                        .WithTags("Templates")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapGet("/", ListTemplates)
              .WithName("ListTemplates")
@@ -25,8 +25,6 @@ public static class TemplatesEndpoints
     }
 
     public static async Task<IResult> ListTemplates(
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
@@ -34,25 +32,20 @@ public static class TemplatesEndpoints
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new
-                {
-                    Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
-                }
-            );
+                new { Error = "No authenticated user: sign in with a GitHub token first." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
@@ -73,7 +66,7 @@ public static class TemplatesEndpoints
         }
 
         var (_, entries) = await pendingSync.ApplyListOverlayAsync(
-            telegramId.Value,
+            userId.Value,
             repository.RepositoryId,
             TemplatesFolder,
             FetchList
@@ -81,7 +74,7 @@ public static class TemplatesEndpoints
 
         // Pending local changes win over remote content, so a template edited
         // moments ago is offered in its new form before the sync happens.
-        var ops = await pendingSync.GetOpsAsync(telegramId.Value, repository.RepositoryId);
+        var ops = await pendingSync.GetOpsAsync(userId.Value, repository.RepositoryId);
 
         var templates = new List<object>();
         foreach (var entry in entries)

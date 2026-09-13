@@ -3,6 +3,7 @@ using System.Net;
 using FluentAssertions;
 using Gitenberg.Tests.Mocks;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Features.Sync;
 using Gitenberg.Web.Features.Templates;
 using Gitenberg.Web.Services;
@@ -138,11 +139,11 @@ public class TemplatesEndpointsTests
     }
 
     [Fact]
-    public async Task ListTemplates_ShouldReturnBadRequest_WhenTelegramIdIsNull()
+    public async Task ListTemplates_ShouldReturnBadRequest_WhenUserIsNotAuthenticated()
     {
         await using var db = CreateInMemoryDbContext();
 
-        var result = await TemplatesEndpoints.ListTemplates(null, null, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -154,7 +155,7 @@ public class TemplatesEndpointsTests
     {
         await using var db = CreateInMemoryDbContext();
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -168,7 +169,7 @@ public class TemplatesEndpointsTests
         db.Users.Add(new User { TelegramId = 12345, CreatedAt = DateTime.UtcNow, LastActivityAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -184,7 +185,7 @@ public class TemplatesEndpointsTests
         // GitHub reports a missing folder with a 404 (Octokit NotFoundException).
         _gitHubService.GetNotesFunc = (_, _) => throw new NotFoundException("Not Found", HttpStatusCode.NotFound);
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         var statusCodeResult = result as IStatusCodeHttpResult;
         statusCodeResult.Should().NotBeNull();
@@ -207,7 +208,7 @@ public class TemplatesEndpointsTests
             return Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent>());
         };
 
-        await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         pathCaptured.Should().Be(TemplatesEndpoints.TemplatesFolder);
     }
@@ -225,7 +226,7 @@ public class TemplatesEndpointsTests
             CreateContent("assets", "templates/assets", ContentType.Dir, null),
         });
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         var templates = GetTemplates(((IValueHttpResult)result).Value);
         templates.Should().HaveCount(1);
@@ -251,7 +252,7 @@ public class TemplatesEndpointsTests
             return Task.FromResult<string?>("# Plan");
         };
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, CreatePendingSync(db));
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, CreatePendingSync(db), httpContext: AuthenticatedContext(12345));
 
         var templates = GetTemplates(((IValueHttpResult)result).Value);
         templates.Should().HaveCount(1);
@@ -272,7 +273,7 @@ public class TemplatesEndpointsTests
 
         await pendingSync.EnqueueAsync(12345, ActiveRepoId(db, 12345), "save", "templates/Встреча.md", "templates/Встреча.md", "# new local content", null);
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, pendingSync);
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, pendingSync, httpContext: AuthenticatedContext(12345));
 
         var templates = GetTemplates(((IValueHttpResult)result).Value);
         templates.Should().HaveCount(1);
@@ -293,7 +294,7 @@ public class TemplatesEndpointsTests
 
         await pendingSync.EnqueueAsync(12345, ActiveRepoId(db, 12345), "delete", "templates/Встреча.md");
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, pendingSync);
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, pendingSync, httpContext: AuthenticatedContext(12345));
 
         var templates = GetTemplates(((IValueHttpResult)result).Value);
         templates.Should().BeEmpty();
@@ -312,12 +313,19 @@ public class TemplatesEndpointsTests
 
         await pendingSync.EnqueueAsync(12345, ActiveRepoId(db, 12345), "save", "templates/Новый.md", "templates/Новый.md", "# Новый шаблон", null);
 
-        var result = await TemplatesEndpoints.ListTemplates(null, 12345, db, CreateResolver(db), _gitHubService, pendingSync);
+        var result = await TemplatesEndpoints.ListTemplates(db, CreateResolver(db), _gitHubService, pendingSync, httpContext: AuthenticatedContext(12345));
 
         var templates = GetTemplates(((IValueHttpResult)result).Value);
         templates.Should().HaveCount(1);
         templates[0].Path.Should().Be("templates/Новый.md");
         templates[0].Content.Should().Be("# Новый шаблон");
+    }
+
+    private static HttpContext AuthenticatedContext(long userId)
+    {
+        var context = new DefaultHttpContext();
+        context.Items[CurrentUserId.ItemsKey] = userId;
+        return context;
     }
 
     private static int ActiveRepoId(AppDbContext db, long telegramId) =>
