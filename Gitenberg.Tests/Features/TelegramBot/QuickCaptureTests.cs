@@ -113,23 +113,23 @@ public class QuickCaptureTests
         return db;
     }
 
-    private static Message CreateTextMessage(string text, long telegramId = 42)
+    private static Message CreateTextMessage(string text, long userId = 42)
     {
         return new Message
         {
-            From = new BotUser { Id = telegramId, IsBot = false, FirstName = "Tester" },
-            Chat = new Chat { Id = telegramId, Type = ChatType.Private },
+            From = new BotUser { Id = userId, IsBot = false, FirstName = "Tester" },
+            Chat = new Chat { Id = userId, Type = ChatType.Private },
             Date = DateTime.UtcNow,
             Text = text,
         };
     }
 
-    private static Message CreatePhotoMessage(string caption, string? sourceTitle, long telegramId = 42)
+    private static Message CreatePhotoMessage(string caption, string? sourceTitle, long userId = 42)
     {
         var message = new Message
         {
-            From = new BotUser { Id = telegramId, IsBot = false, FirstName = "Tester" },
-            Chat = new Chat { Id = telegramId, Type = ChatType.Private },
+            From = new BotUser { Id = userId, IsBot = false, FirstName = "Tester" },
+            Chat = new Chat { Id = userId, Type = ChatType.Private },
             Date = DateTime.UtcNow,
             Photo = new[]
             {
@@ -439,7 +439,7 @@ public class QuickCaptureTests
 
         // Act
         await handler.HandleUpdateAsync(
-            new Update { Message = CreateTextMessage("привет", telegramId: 999) },
+            new Update { Message = CreateTextMessage("привет", userId: 999) },
             CancellationToken.None
         );
 

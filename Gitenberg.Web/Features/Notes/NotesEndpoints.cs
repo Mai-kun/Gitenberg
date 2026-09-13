@@ -2,10 +2,9 @@ using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Activity;
 using Gitenberg.Web.Features.Pins;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Features.Shares;
 using Gitenberg.Web.Features.Sync;
-using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -17,21 +16,21 @@ namespace Gitenberg.Web.Features.Notes;
 
 public static class NotesEndpoints
 {
-    private static string GetCacheKey(long telegramId, int repositoryId, string? path)
+    private static string GetCacheKey(long userId, int repositoryId, string? path)
     {
-        return $"notes_{telegramId}_{repositoryId}_{path ?? string.Empty}";
+        return $"notes_{userId}_{repositoryId}_{path ?? string.Empty}";
     }
 
-    private static string GetCtsKey(long telegramId, int repositoryId)
+    private static string GetCtsKey(long userId, int repositoryId)
     {
-        return $"notes_cts_{telegramId}_{repositoryId}";
+        return $"notes_cts_{userId}_{repositoryId}";
     }
 
     public static void MapNotesEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/notes")
                        .WithTags("Notes")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapGet("/", GetNotes)
              .WithName("GetNotes")
@@ -56,8 +55,6 @@ public static class NotesEndpoints
 
     public static async Task<IResult> GetNotes(
         [FromQuery] string? path,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
@@ -66,25 +63,23 @@ public static class NotesEndpoints
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
 
-        return await GetNotesCachedAsync(telegramId.Value, path, dbContext, repositoryResolver, gitHubService, memoryCache, pendingSync);
+        return await GetNotesCachedAsync(userId.Value, path, dbContext, repositoryResolver, gitHubService, memoryCache, pendingSync);
     }
 
     public static async Task<IResult> GetNoteContent(
         [FromQuery] string path,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
@@ -92,14 +87,14 @@ public static class NotesEndpoints
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -109,13 +104,13 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "Path parameter is required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
@@ -123,7 +118,7 @@ public static class NotesEndpoints
 
         // Pending local changes override the remote file: a queued save wins,
         // a queued delete/move makes the path read as missing.
-        var ops = await pendingSync.GetOpsAsync(telegramId.Value, repository.RepositoryId);
+        var ops = await pendingSync.GetOpsAsync(userId.Value, repository.RepositoryId);
         var overlay = pendingSync.GetContentOverlay(ops, path);
         if (overlay.Deleted)
         {
@@ -141,26 +136,23 @@ public static class NotesEndpoints
 
     public static async Task<IResult> CreateOrUpdateNote(
         [FromBody] CreateOrUpdateNoteRequest? request,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromHeader(Name = "X-Timezone-Offset")] int? timezoneOffset,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         PendingSyncService pendingSync,
         IMemoryCache memoryCache,
-        ReminderService reminderService,
         ActivityService activityService,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -170,13 +162,13 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "Invalid request body or missing 'Path'." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
@@ -184,10 +176,9 @@ public static class NotesEndpoints
 
         // Local-first: the change is queued and pushed to GitHub by the sync
         // timer or the manual flush button.
-        await pendingSync.EnqueueAsync(telegramId.Value, repository.RepositoryId, "save", request.Path, request.Path, request.Content ?? string.Empty, request.CommitMessage);
-        BustUserCache(memoryCache, telegramId.Value, repository.RepositoryId);
-        await reminderService.UpsertForNoteAsync(telegramId.Value, repository.RepositoryId, request.Path, request.Content ?? string.Empty);
-        await activityService.RecordAsync(telegramId.Value, timezoneOffset);
+        await pendingSync.EnqueueAsync(userId.Value, repository.RepositoryId, "save", request.Path, request.Path, request.Content ?? string.Empty, request.CommitMessage);
+        BustUserCache(memoryCache, userId.Value, repository.RepositoryId);
+        await activityService.RecordAsync(userId.Value, timezoneOffset);
 
         return Results.Ok(new { Message = $"Note at '{request.Path}' saved locally; it will be synced to GitHub.", Pending = true });
     }
@@ -195,28 +186,25 @@ public static class NotesEndpoints
     public static async Task<IResult> DeleteNote(
         [FromQuery] string path,
         [FromQuery] string? commitMessage,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromHeader(Name = "X-Timezone-Offset")] int? timezoneOffset,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         PendingSyncService pendingSync,
         IMemoryCache memoryCache,
-        ReminderService reminderService,
         ActivityService activityService,
         PinsService? pinsService = null,
         ShareLinksService? shareLinksService = null,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -226,60 +214,56 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "Path parameter is required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
 
-        await pendingSync.EnqueueAsync(telegramId.Value, repository.RepositoryId, "delete", path);
-        BustUserCache(memoryCache, telegramId.Value, repository.RepositoryId);
-        await reminderService.RemoveForNoteAsync(telegramId.Value, repository.RepositoryId, path);
+        await pendingSync.EnqueueAsync(userId.Value, repository.RepositoryId, "delete", path);
+        BustUserCache(memoryCache, userId.Value, repository.RepositoryId);
         if (pinsService != null)
         {
             // Deleting a folder also unpins everything pinned below it.
-            await pinsService.RemoveForPathAsync(telegramId.Value, repository.RepositoryId, path);
+            await pinsService.RemoveForPathAsync(userId.Value, repository.RepositoryId, path);
         }
         if (shareLinksService != null)
         {
             // Deleted notes and folders lose their public share links.
-            await shareLinksService.RemoveForPathAsync(telegramId.Value, repository.RepositoryId, path);
+            await shareLinksService.RemoveForPathAsync(userId.Value, repository.RepositoryId, path);
         }
-        await activityService.RecordAsync(telegramId.Value, timezoneOffset);
+        await activityService.RecordAsync(userId.Value, timezoneOffset);
 
         return Results.Ok(new { Message = $"Note at '{path}' deleted locally; it will be synced to GitHub.", Pending = true });
     }
 
     public static async Task<IResult> MoveNote(
         [FromBody] MoveNoteRequest? request,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
         [FromHeader(Name = "X-Timezone-Offset")] int? timezoneOffset,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         PendingSyncService pendingSync,
         IMemoryCache memoryCache,
-        ReminderService reminderService,
         ActivityService activityService,
         PinsService? pinsService = null,
         ShareLinksService? shareLinksService = null,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -291,13 +275,13 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = "Both 'FromPath' and 'ToPath' are required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
@@ -310,54 +294,28 @@ public static class NotesEndpoints
             return Results.BadRequest(new { Error = $"Cannot move '{request.FromPath}' inside itself." });
         }
 
-        await pendingSync.EnqueueAsync(telegramId.Value, repository.RepositoryId, "move", request.FromPath, request.ToPath, request.Content);
-        BustUserCache(memoryCache, telegramId.Value, repository.RepositoryId);
-        await SyncRemindersOnMoveAsync(reminderService, telegramId.Value, repository.RepositoryId, request);
+        await pendingSync.EnqueueAsync(userId.Value, repository.RepositoryId, "move", request.FromPath, request.ToPath, request.Content);
+        BustUserCache(memoryCache, userId.Value, repository.RepositoryId);
         if (pinsService != null)
         {
             // Pins are path metadata independent of content: the moved item and
             // everything pinned below it follow the new path either way.
-            await pinsService.ReassignOnMoveAsync(telegramId.Value, repository.RepositoryId, request.FromPath, request.ToPath);
+            await pinsService.ReassignOnMoveAsync(userId.Value, repository.RepositoryId, request.FromPath, request.ToPath);
         }
         if (shareLinksService != null)
         {
             // Share links follow the moved item too, so public URLs survive renames.
-            await shareLinksService.ReassignOnMoveAsync(telegramId.Value, repository.RepositoryId, request.FromPath, request.ToPath);
+            await shareLinksService.ReassignOnMoveAsync(userId.Value, repository.RepositoryId, request.FromPath, request.ToPath);
         }
-        await activityService.RecordAsync(telegramId.Value, timezoneOffset);
+        await activityService.RecordAsync(userId.Value, timezoneOffset);
 
         return Results.Ok(new { Message = $"Move of '{request.FromPath}' to '{request.ToPath}' queued; it will be synced to GitHub.", Pending = true });
     }
 
-    // A move re-points reminders: with content the new path is reconciled and
-    // the old path dropped; without content the pending reminders simply move.
-    private static async Task SyncRemindersOnMoveAsync(ReminderService reminderService, long telegramId, int repositoryId, MoveNoteRequest request)
-    {
-        var fromPath = request.FromPath.Trim('/');
-        var toPath = request.ToPath.Trim('/');
-        if (string.Equals(fromPath, toPath, StringComparison.OrdinalIgnoreCase))
-        {
-            if (request.Content != null)
-            {
-                await reminderService.UpsertForNoteAsync(telegramId, repositoryId, toPath, request.Content);
-            }
-            return;
-        }
 
-        if (request.Content != null)
-        {
-            await reminderService.UpsertForNoteAsync(telegramId, repositoryId, toPath, request.Content);
-            await reminderService.RemoveForNoteAsync(telegramId, repositoryId, fromPath);
-        }
-        else
-        {
-            await reminderService.ReassignNoteAsync(telegramId, repositoryId, fromPath, toPath);
-        }
-    }
-
-    internal static void BustUserCache(IMemoryCache memoryCache, long telegramId, int repositoryId)
+    internal static void BustUserCache(IMemoryCache memoryCache, long userId, int repositoryId)
     {
-        var ctsKey = GetCtsKey(telegramId, repositoryId);
+        var ctsKey = GetCtsKey(userId, repositoryId);
         if (memoryCache.TryGetValue(ctsKey, out CancellationTokenSource? cts))
         {
             cts?.Cancel();
@@ -367,7 +325,7 @@ public static class NotesEndpoints
     }
 
     public static async Task<IResult> GetNotesCachedAsync(
-        long telegramId,
+        long userId,
         string? path,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
@@ -376,20 +334,20 @@ public static class NotesEndpoints
         PendingSyncService pendingSync
     )
     {
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
 
-        var cacheKey = GetCacheKey(telegramId, repository.RepositoryId, path);
-        var ctsKey = GetCtsKey(telegramId, repository.RepositoryId);
+        var cacheKey = GetCacheKey(userId, repository.RepositoryId, path);
+        var ctsKey = GetCtsKey(userId, repository.RepositoryId);
 
         var cts = memoryCache.GetOrCreate(ctsKey, entry =>
         {
@@ -405,7 +363,7 @@ public static class NotesEndpoints
         // Pending local changes are overlaid on the remote listing, and the
         // listing itself may need to be read from the pre-move folder path.
         var (effectivePath, contents) = await pendingSync.ApplyListOverlayAsync(
-            telegramId,
+            userId,
             repository.RepositoryId,
             path,
             async (p) => await gitHubService.GetNotesAsync(repository.Context, p)

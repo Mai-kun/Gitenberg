@@ -1,8 +1,7 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Sync;
-using Gitenberg.Web.Features.TelegramBot;
-using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,7 +15,7 @@ public static class ShareEndpoints
     {
         var group = app.MapGroup("/api/notes/share")
                        .WithTags("Shares")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapPost("/", CreateShareLink)
              .WithName("CreateShareLink")
@@ -44,23 +43,20 @@ public static class ShareEndpoints
 
     public static async Task<IResult> CreateShareLink(
         [FromBody] ShareNoteRequest? request,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
         PendingSyncService pendingSync,
         ShareLinksService shareLinks,
         ShareConfiguration shareConfig,
-        BotConfiguration botConfig,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "No authenticated user: sign in with a GitHub token first." });
         }
 
         if (request == null || string.IsNullOrWhiteSpace(request.Path) || request.Path.Trim('/').Length == 0)
@@ -68,47 +64,44 @@ public static class ShareEndpoints
             return Results.BadRequest(new { Error = "'Path' is required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
 
         var path = request.Path.Trim('/');
-        var content = await ResolveNoteContentAsync(path, repository, pendingSync, gitHubService, telegramId.Value);
+        var content = await ResolveNoteContentAsync(path, repository, pendingSync, gitHubService, userId.Value);
         if (content == null)
         {
             return Results.NotFound(new { Error = $"Note at '{path}' does not exist." });
         }
 
-        var link = await shareLinks.CreateOrGetAsync(telegramId.Value, repository.RepositoryId, path);
-        var url = ShareLinkUrlBuilder.BuildUrl(shareConfig.PublicBaseUrl, botConfig.HostAddress, link.Token);
+        var link = await shareLinks.CreateOrGetAsync(userId.Value, repository.RepositoryId, path);
+        var url = ShareLinkUrlBuilder.BuildUrl(shareConfig.PublicBaseUrl, RequestBaseUrl(httpContext), link.Token);
         return Results.Ok(new { link.Token, Url = url, link.CreatedAt });
     }
 
     public static async Task<IResult> GetShareLink(
         [FromQuery] string path,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         ShareLinksService shareLinks,
         ShareConfiguration shareConfig,
-        BotConfiguration botConfig,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "No authenticated user: sign in with a GitHub token first." });
         }
 
         if (string.IsNullOrWhiteSpace(path) || path.Trim('/').Length == 0)
@@ -116,51 +109,62 @@ public static class ShareEndpoints
             return Results.BadRequest(new { Error = "Path parameter is required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
         }
 
-        var link = await shareLinks.GetActiveAsync(telegramId.Value, repository.RepositoryId, path);
+        var link = await shareLinks.GetActiveAsync(userId.Value, repository.RepositoryId, path);
         if (link == null)
         {
             return Results.NotFound(new { Error = $"No active share link for '{path.Trim('/')}'." });
         }
 
-        var url = ShareLinkUrlBuilder.BuildUrl(shareConfig.PublicBaseUrl, botConfig.HostAddress, link.Token);
+        var url = ShareLinkUrlBuilder.BuildUrl(shareConfig.PublicBaseUrl, RequestBaseUrl(httpContext), link.Token);
         return Results.Ok(new { link.Token, Url = url, link.CreatedAt });
+    }
+
+    // Share URLs anchor to the deployment address. ShareConfiguration:PublicBaseUrl
+    // wins when set (reverse proxies often expose a different external host);
+    // otherwise the current request's own origin is used.
+    private static string RequestBaseUrl(HttpContext? httpContext)
+    {
+        if (httpContext?.Request == null)
+        {
+            return string.Empty;
+        }
+
+        return $"{httpContext.Request.Scheme}://{httpContext.Request.Host}{httpContext.Request.PathBase}";
     }
 
     public static async Task<IResult> RevokeShareLink(
         [FromRoute] string token,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ShareLinksService shareLinks,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var revoked = await shareLinks.RevokeAsync(telegramId.Value, token);
+        var revoked = await shareLinks.RevokeAsync(userId.Value, token);
         if (!revoked)
         {
             return Results.NotFound(new { Error = "Share link not found or already revoked." });
@@ -211,10 +215,10 @@ public static class ShareEndpoints
         ResolvedRepository repository,
         PendingSyncService pendingSync,
         IGitHubService gitHubService,
-        long telegramId
+        long userId
     )
     {
-        var ops = await pendingSync.GetOpsAsync(telegramId, repository.RepositoryId);
+        var ops = await pendingSync.GetOpsAsync(userId, repository.RepositoryId);
         var overlay = pendingSync.GetContentOverlay(ops, path);
         if (overlay.Deleted)
         {

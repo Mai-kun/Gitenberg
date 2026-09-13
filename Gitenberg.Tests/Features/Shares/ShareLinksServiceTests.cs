@@ -48,7 +48,7 @@ public class ShareLinksServiceTests
 
     private async Task<(User User, Repository Repository)> SeedUserWithRepositoryAsync(
         AppDbContext db,
-        long telegramId = 12345,
+        long userId = 12345,
         string owner = "owner",
         string repo = "first",
         string token = "token_1"
@@ -56,7 +56,7 @@ public class ShareLinksServiceTests
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -65,7 +65,7 @@ public class ShareLinksServiceTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = $"{owner}/{repo}",
             RepositoryOwner = owner,
             RepositoryName = repo,

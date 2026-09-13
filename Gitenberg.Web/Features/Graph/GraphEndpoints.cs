@@ -1,8 +1,8 @@
 using System.Globalization;
 using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Features.Search;
 using Gitenberg.Web.Features.Sync;
-using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -10,24 +10,24 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
-namespace Gitenberg.Web.Features.Tasks;
+namespace Gitenberg.Web.Features.Graph;
 
-public static class TasksEndpoints
+public static class GraphEndpoints
 {
-    private const int MaxTasks = 500;
+    private const int MaxNodes = 1000;
 
-    public static void MapTasksEndpoints(this IEndpointRouteBuilder app)
+    public static void MapGraphEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/notes")
-                       .WithTags("Tasks")
+                       .WithTags("Graph")
                        .RequireAuth();
 
-        group.MapGet("/tasks", GetTasks)
-             .WithName("GetNoteTasks")
-             .WithSummary("All markdown checkboxes across the user's notes (pending local changes applied)");
+        group.MapGet("/graph", GetGraph)
+             .WithName("GetNotesGraph")
+             .WithSummary("All notes of the active repository and their [[WikiLink]] connections as a link graph");
     }
 
-    public static async Task<IResult> GetTasks(
+    public static async Task<IResult> GetGraph(
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         NoteIndexer indexer,
@@ -39,24 +39,25 @@ public static class TasksEndpoints
         if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." }
+                new { Error = "No authenticated user: sign in with a GitHub token first." }
             );
         }
 
         var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
+            return Results.NotFound(new { Error = $"User with ID {userId} not found." });
         }
 
         var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
-            return Results.Ok(new List<NoteTask>());
+            return Results.Ok(new WikiGraph([], []));
         }
 
-        // Same freshness contract as search: refresh the active repository's
-        // index first (cheap when nothing changed), then read from it.
+        // Same freshness contract as search and tasks: refresh the active
+        // repository's index first (cheap when nothing changed), then read
+        // the whole vault from it.
         try
         {
             await indexer.SynchronizeUserByIdAsync(userId.Value, repository.RepositoryId);
@@ -75,7 +76,7 @@ public static class TasksEndpoints
         // Pending local changes win over the indexed remote content.
         var (excluded, overrides) = await pendingSync.GetContentOverlayAsync(userId.Value, repository.RepositoryId);
 
-        var tasks = new List<NoteTask>();
+        var notes = new List<(string Path, string Content)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
@@ -87,7 +88,7 @@ public static class TasksEndpoints
             var content = overrides.TryGetValue(row.NotePath, out var pendingContent)
                 ? pendingContent
                 : row.Body();
-            tasks.AddRange(TaskListBuilder.Parse(row.NotePath, content));
+            notes.Add((row.NotePath, content ?? string.Empty));
         }
 
         // Brand-new notes that exist only as pending saves (no indexed row).
@@ -97,9 +98,16 @@ public static class TasksEndpoints
             {
                 continue;
             }
-            tasks.AddRange(TaskListBuilder.Parse(path, content));
+            notes.Add((path, content));
         }
 
-        return Results.Ok(tasks.Take(MaxTasks).ToList());
+        var graph = WikiLinkGraph.Build(notes, MaxNodes);
+        return Results.Ok(
+            new
+            {
+                Nodes = graph.Nodes.Select(n => new { n.Path, n.Name, n.Degree }),
+                Links = graph.Links.Select(l => new { l.Source, l.Target }),
+            }
+        );
     }
 }

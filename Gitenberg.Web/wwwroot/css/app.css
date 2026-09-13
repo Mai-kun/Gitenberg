@@ -1,19 +1,20 @@
 /* ==========================================================================
-   Gitenberg Mini App — Telegram theme variables with light fallbacks
+   Gitenberg theme variables (light palette is the base; data-theme
+   attributes and prefers-color-scheme override it)
    ========================================================================== */
 
 :root {
-  --tg-bg: var(--tg-theme-bg-color, #ffffff);
-  --tg-text: var(--tg-theme-text-color, #222222);
-  --tg-hint: var(--tg-theme-hint-color, #999999);
-  --tg-link: var(--tg-theme-link-color, #2481cc);
-  --tg-button: var(--tg-theme-button-color, #2481cc);
-  --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --tg-secondary: var(--tg-theme-secondary-bg-color, #f0f0f0);
-  --tg-header: var(--tg-theme-header-bg-color, var(--tg-secondary));
-  --tg-accent: var(--tg-theme-accent-text-color, var(--tg-button));
-  --tg-destructive: var(--tg-theme-destructive-text-color, #e53935);
-  --tg-section-sep: var(--tg-theme-section-separator-color, #e0e0e0);
+  --app-bg: #ffffff;
+  --app-text: #222222;
+  --app-hint: #999999;
+  --app-link: #2481cc;
+  --app-button: #2481cc;
+  --app-button-text: #ffffff;
+  --app-secondary: #f0f0f0;
+  --app-header: var(--app-secondary);
+  --app-accent: var(--app-button);
+  --app-destructive: #e53935;
+  --app-section-sep: #e0e0e0;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -31,24 +32,24 @@
 }
 
 /* ==========================================================================
-   Fixed themes (Settings → Appearance). A theme overrides the Telegram
-   variables wholesale, so every component built on --tg-* follows it; the
-   attribute selector (0,2,0) also beats the prefers-color-scheme block that
-   recolors the heatmap, letting each palette carry its own --hm-* ramp.
+   Fixed themes (Settings → Appearance). A theme overrides the base variables
+   wholesale, so every component built on --app-* follows it; the attribute
+   selector (0,2,0) also beats the prefers-color-scheme block that recolors
+   the heatmap, letting each palette carry its own --hm-* ramp.
    ========================================================================== */
 
 :root[data-theme="light"] {
-  --tg-bg: #ffffff;
-  --tg-text: #222222;
-  --tg-hint: #999999;
-  --tg-link: #2481cc;
-  --tg-button: #2481cc;
-  --tg-button-text: #ffffff;
-  --tg-secondary: #f0f0f0;
-  --tg-header: #f0f0f0;
-  --tg-accent: #2481cc;
-  --tg-destructive: #e53935;
-  --tg-section-sep: #e0e0e0;
+  --app-bg: #ffffff;
+  --app-text: #222222;
+  --app-hint: #999999;
+  --app-link: #2481cc;
+  --app-button: #2481cc;
+  --app-button-text: #ffffff;
+  --app-secondary: #f0f0f0;
+  --app-header: #f0f0f0;
+  --app-accent: #2481cc;
+  --app-destructive: #e53935;
+  --app-section-sep: #e0e0e0;
   --hm-0: #ebedf0;
   --hm-1: #9be9a8;
   --hm-2: #40c463;
@@ -57,17 +58,17 @@
 }
 
 :root[data-theme="dark"] {
-  --tg-bg: #17212b;
-  --tg-text: #eef3f7;
-  --tg-hint: #8b98a5;
-  --tg-link: #6ab3f3;
-  --tg-button: #5288c1;
-  --tg-button-text: #ffffff;
-  --tg-secondary: #232e3c;
-  --tg-header: #232e3c;
-  --tg-accent: #6ab3f3;
-  --tg-destructive: #ef5350;
-  --tg-section-sep: #101921;
+  --app-bg: #17212b;
+  --app-text: #eef3f7;
+  --app-hint: #8b98a5;
+  --app-link: #6ab3f3;
+  --app-button: #5288c1;
+  --app-button-text: #ffffff;
+  --app-secondary: #232e3c;
+  --app-header: #232e3c;
+  --app-accent: #6ab3f3;
+  --app-destructive: #ef5350;
+  --app-section-sep: #101921;
   --hm-0: #1c2128;
   --hm-1: #0e4429;
   --hm-2: #006d32;
@@ -76,17 +77,17 @@
 }
 
 :root[data-theme="sepia"] {
-  --tg-bg: #f6edda;
-  --tg-text: #4e3d2c;
-  --tg-hint: #9c8465;
-  --tg-link: #8c5e24;
-  --tg-button: #a4793b;
-  --tg-button-text: #fdf6e3;
-  --tg-secondary: #ece0c4;
-  --tg-header: #ece0c4;
-  --tg-accent: #8c5e24;
-  --tg-destructive: #b03a2e;
-  --tg-section-sep: #ddcba6;
+  --app-bg: #f6edda;
+  --app-text: #4e3d2c;
+  --app-hint: #9c8465;
+  --app-link: #8c5e24;
+  --app-button: #a4793b;
+  --app-button-text: #fdf6e3;
+  --app-secondary: #ece0c4;
+  --app-header: #ece0c4;
+  --app-accent: #8c5e24;
+  --app-destructive: #b03a2e;
+  --app-section-sep: #ddcba6;
   --hm-0: #e8dcbc;
   --hm-1: #c9b988;
   --hm-2: #a89355;
@@ -95,22 +96,98 @@
 }
 
 :root[data-theme="nord"] {
-  --tg-bg: #2e3440;
-  --tg-text: #eceff4;
-  --tg-hint: #9aa4b8;
-  --tg-link: #88c0d0;
-  --tg-button: #81a1c1;
-  --tg-button-text: #2e3440;
-  --tg-secondary: #3b4252;
-  --tg-header: #3b4252;
-  --tg-accent: #88c0d0;
-  --tg-destructive: #bf616a;
-  --tg-section-sep: #434c5e;
+  --app-bg: #2e3440;
+  --app-text: #eceff4;
+  --app-hint: #9aa4b8;
+  --app-link: #88c0d0;
+  --app-button: #81a1c1;
+  --app-button-text: #2e3440;
+  --app-secondary: #3b4252;
+  --app-header: #3b4252;
+  --app-accent: #88c0d0;
+  --app-destructive: #bf616a;
+  --app-section-sep: #434c5e;
   --hm-0: #3b4252;
   --hm-1: #466087;
   --hm-2: #5e81ac;
   --hm-3: #81a1c1;
   --hm-4: #88c0d0;
+}
+
+:root[data-theme="dracula"] {
+  --app-bg: #282a36;
+  --app-text: #f8f8f2;
+  --app-hint: #7c86b0;
+  --app-link: #8be9fd;
+  --app-button: #bd93f9;
+  --app-button-text: #282a36;
+  --app-secondary: #44475a;
+  --app-header: #44475a;
+  --app-accent: #8be9fd;
+  --app-destructive: #ff5555;
+  --app-section-sep: #20212c;
+  --hm-0: #313342;
+  --hm-1: #215d3c;
+  --hm-2: #2ea25f;
+  --hm-3: #43d97a;
+  --hm-4: #50fa7b;
+}
+
+:root[data-theme="solar-light"] {
+  --app-bg: #fdf6e3;
+  --app-text: #657b83;
+  --app-hint: #93a1a1;
+  --app-link: #268bd2;
+  --app-button: #268bd2;
+  --app-button-text: #fdf6e3;
+  --app-secondary: #eee8d5;
+  --app-header: #eee8d5;
+  --app-accent: #268bd2;
+  --app-destructive: #dc322f;
+  --app-section-sep: #e0d8bf;
+  --hm-0: #ece4cb;
+  --hm-1: #c6cf8b;
+  --hm-2: #a2b83a;
+  --hm-3: #859900;
+  --hm-4: #5f6f00;
+}
+
+:root[data-theme="solar-dark"] {
+  --app-bg: #002b36;
+  --app-text: #93a1a1;
+  --app-hint: #6a828a;
+  --app-link: #268bd2;
+  --app-button: #268bd2;
+  --app-button-text: #fdf6e3;
+  --app-secondary: #073642;
+  --app-header: #073642;
+  --app-accent: #268bd2;
+  --app-destructive: #ef5350;
+  --app-section-sep: #00212a;
+  --hm-0: #06323d;
+  --hm-1: #0e4429;
+  --hm-2: #006d32;
+  --hm-3: #26a641;
+  --hm-4: #39d353;
+}
+
+:root[data-theme="black"] {
+  --app-bg: #000000;
+  --app-text: #e6e6e6;
+  --app-hint: #8a8a8a;
+  --app-link: #56c1ff;
+  --app-button: #ffffff;
+  --app-button-text: #000000;
+  --app-secondary: #121212;
+  --app-header: #121212;
+  --app-accent: #56c1ff;
+  --app-destructive: #ff5252;
+  --app-section-sep: #1f1f1f;
+  --hm-0: #0d0d0d;
+  --hm-1: #0e4429;
+  --hm-2: #006d32;
+  --hm-3: #26a641;
+  --hm-4: #39d353;
 }
 
 * { box-sizing: border-box; }
@@ -123,8 +200,8 @@ html, body {
 body {
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--tg-bg);
-  color: var(--tg-text);
+  background: var(--app-bg);
+  color: var(--app-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 16px;
   line-height: 1.45;
@@ -139,7 +216,7 @@ h1 {
   margin: 0;
 }
 
-a { color: var(--tg-link); }
+a { color: var(--app-link); }
 
 button {
   font: inherit;
@@ -152,18 +229,18 @@ button {
 
 input, textarea {
   font: inherit;
-  color: var(--tg-text);
+  color: var(--app-text);
 }
 
-/* Native checkboxes pick up the Telegram accent color in both themes. */
+/* Native checkboxes pick up the accent color in both themes. */
 input[type="checkbox"] {
-  accent-color: var(--tg-button);
+  accent-color: var(--app-button);
 }
 
 /* Keyboard navigation (desktop / Bluetooth keyboard): visible focus ring on
    interactive elements, without painting rings on touch taps. */
 :focus-visible {
-  outline: 2px solid var(--tg-button);
+  outline: 2px solid var(--app-button);
   outline-offset: 2px;
 }
 
@@ -178,31 +255,6 @@ input[type="checkbox"] {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-}
-
-/* ==========================================================================
-   Dev bar
-   ========================================================================== */
-
-.dev-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px var(--pad);
-  background: var(--tg-secondary);
-  border-bottom: 1px solid var(--tg-section-sep);
-  font-size: 13px;
-  color: var(--tg-hint);
-}
-
-.dev-bar label { white-space: nowrap; }
-
-.dev-bar input {
-  width: 130px;
-  padding: 4px 8px;
-  border: 1px solid var(--tg-section-sep);
-  border-radius: var(--radius-sm);
-  background: var(--tg-bg);
 }
 
 /* ==========================================================================
@@ -222,12 +274,12 @@ input[type="checkbox"] {
 }
 
 .register-icon {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   margin-bottom: 12px;
 }
 
 .register-card .hint {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-size: 14px;
   margin: 8px 0 24px;
 }
@@ -240,22 +292,22 @@ input[type="checkbox"] {
 .field label {
   display: block;
   font-size: 13px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   margin-bottom: 5px;
 }
 
 .field input {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius);
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   outline: none;
   transition: border-color 0.15s ease;
 }
 
 .field input:focus {
-  border-color: var(--tg-button);
+  border-color: var(--app-button);
 }
 
 /* Label row with a "?" hint button and its tap-to-toggle popover */
@@ -274,9 +326,9 @@ input[type="checkbox"] {
   width: 18px;
   height: 18px;
   flex: none;
-  border: 1px solid var(--tg-hint);
+  border: 1px solid var(--app-hint);
   border-radius: 50%;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
@@ -304,10 +356,10 @@ input[type="checkbox"] {
   right: 0;
   z-index: 30;
   padding: 10px 12px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
-  color: var(--tg-text);
+  background: var(--app-secondary);
+  color: var(--app-text);
   font-size: 13px;
   line-height: 1.45;
   text-align: left;
@@ -326,10 +378,10 @@ input[type="checkbox"] {
 .folder-chip {
   max-width: 100%;
   padding: 6px 12px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: 999px;
-  background: var(--tg-secondary);
-  color: var(--tg-text);
+  background: var(--app-secondary);
+  color: var(--app-text);
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -339,7 +391,7 @@ input[type="checkbox"] {
 .folder-chip:active { transform: scale(0.96); }
 
 .error-text {
-  color: var(--tg-destructive);
+  color: var(--app-destructive);
   font-size: 14px;
   margin: 4px 0 12px;
   text-align: left;
@@ -363,13 +415,13 @@ input[type="checkbox"] {
 .btn[disabled] { opacity: 0.55; cursor: default; }
 
 .btn-primary {
-  background: var(--tg-button);
-  color: var(--tg-button-text);
+  background: var(--app-button);
+  color: var(--app-button-text);
 }
 
 .btn-secondary {
-  background: var(--tg-secondary);
-  color: var(--tg-text);
+  background: var(--app-secondary);
+  color: var(--app-text);
 }
 
 .spinner {
@@ -415,13 +467,13 @@ input[type="checkbox"] {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  color: var(--tg-button);
+  color: var(--app-button);
   flex-shrink: 0;
 }
 
-.icon-btn:active { background: var(--tg-secondary); }
+.icon-btn:active { background: var(--app-secondary); }
 
-.icon-btn-danger { color: var(--tg-destructive); }
+.icon-btn-danger { color: var(--app-destructive); }
 
 .breadcrumbs {
   display: flex;
@@ -430,22 +482,22 @@ input[type="checkbox"] {
   gap: 2px 4px;
   padding: 4px var(--pad) 10px;
   font-size: 14px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   word-break: break-all;
 }
 
 .crumb {
-  color: var(--tg-link);
+  color: var(--app-link);
   padding: 2px 4px;
   border-radius: 6px;
 }
 
-.crumb:active { background: var(--tg-secondary); }
+.crumb:active { background: var(--app-secondary); }
 
-.crumb-sep { color: var(--tg-hint); user-select: none; }
+.crumb-sep { color: var(--app-hint); user-select: none; }
 
 .crumb-current {
-  color: var(--tg-text);
+  color: var(--app-text);
   font-weight: 600;
   padding: 2px 4px;
 }
@@ -464,7 +516,7 @@ input[type="checkbox"] {
   padding: 10px 38px 10px 14px;
   border: none;
   border-radius: 10px;
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   outline: none;
 }
 
@@ -474,8 +526,8 @@ input[type="checkbox"] {
   flex-shrink: 0;
   padding: 9px 14px;
   border-radius: 10px;
-  background: var(--tg-button);
-  color: var(--tg-button-text);
+  background: var(--app-button);
+  color: var(--app-button-text);
   font-weight: 600;
   font-size: 14px;
 }
@@ -506,7 +558,7 @@ input[type="checkbox"] {
   transform: translateY(-60%);
   width: 28px;
   height: 28px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 .search-result {
@@ -515,7 +567,7 @@ input[type="checkbox"] {
   text-align: left;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   margin-bottom: 6px;
 }
 
@@ -523,7 +575,7 @@ input[type="checkbox"] {
 
 .search-result .path {
   font-size: 13px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   word-break: break-all;
 }
 
@@ -534,7 +586,7 @@ input[type="checkbox"] {
 }
 
 .search-result .snippet b {
-  color: var(--tg-accent);
+  color: var(--app-accent);
   font-weight: 700;
 }
 
@@ -550,7 +602,7 @@ input[type="checkbox"] {
   width: 100%;
   text-align: left;
   padding: 12px 12px;
-  border-bottom: 1px solid var(--tg-section-sep);
+  border-bottom: 1px solid var(--app-section-sep);
   border-radius: 0;
   transition: background 0.1s ease;
 }
@@ -560,7 +612,7 @@ input[type="checkbox"] {
   border-top-right-radius: var(--radius);
 }
 
-.note-row:active { background: var(--tg-secondary); }
+.note-row:active { background: var(--app-secondary); }
 
 .note-icon {
   flex-shrink: 0;
@@ -570,13 +622,13 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: var(--tg-secondary);
-  color: var(--tg-button);
+  background: var(--app-secondary);
+  color: var(--app-button);
 }
 
 .note-icon svg { width: 20px; height: 20px; }
 
-.note-row.is-file .note-icon { color: var(--tg-hint); }
+.note-row.is-file .note-icon { color: var(--app-hint); }
 
 .note-body {
   flex: 1;
@@ -601,13 +653,13 @@ input[type="checkbox"] {
   flex-shrink: 0;
   vertical-align: -2px;
   margin-right: 5px;
-  color: var(--tg-button);
+  color: var(--app-button);
 }
 
 .note-meta {
   display: block;
   font-size: 12px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -622,19 +674,19 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
-.note-delete:active { color: var(--tg-destructive); background: var(--tg-secondary); }
+.note-delete:active { color: var(--app-destructive); background: var(--app-secondary); }
 
-.note-info:active { color: var(--tg-button); background: var(--tg-secondary); }
+.note-info:active { color: var(--app-button); background: var(--app-secondary); }
 
 .note-info svg { width: 18px; height: 18px; }
 
 .status-text {
   padding: 24px var(--pad);
   text-align: center;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-size: 14px;
 }
 
@@ -646,7 +698,7 @@ input[type="checkbox"] {
 }
 
 .skeleton-row .sk {
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   border-radius: 8px;
   animation: pulse 1.2s ease-in-out infinite;
 }
@@ -668,8 +720,8 @@ input[type="checkbox"] {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--tg-button);
-  color: var(--tg-button-text);
+  background: var(--app-button);
+  color: var(--app-button-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -727,13 +779,13 @@ input[type="checkbox"] {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 14px;
   padding: 10px 12px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   outline: none;
 }
 
-.editor-path-field input:focus { border-color: var(--tg-button); }
+.editor-path-field input:focus { border-color: var(--app-button); }
 
 #editor-container {
   flex: 1;
@@ -748,18 +800,18 @@ input[type="checkbox"] {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius);
   overflow: hidden;
-  background: var(--tg-bg);
+  background: var(--app-bg);
 }
 
 #editor-container .CodeMirror {
   flex: 1;
   min-height: 0;
   height: auto !important;
-  color: var(--tg-text);
-  background: var(--tg-bg);
+  color: var(--app-text);
+  background: var(--app-bg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 14px;
   line-height: 1.55;
@@ -774,50 +826,50 @@ input[type="checkbox"] {
    ========================================================================== */
 
 #editor-container .editor-toolbar {
-  background: var(--tg-secondary);
-  border-bottom: 1px solid var(--tg-section-sep);
-  color: var(--tg-hint);
+  background: var(--app-secondary);
+  border-bottom: 1px solid var(--app-section-sep);
+  color: var(--app-hint);
   padding: 6px 8px;
 }
 
 #editor-container .editor-toolbar a {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   border-radius: 6px;
 }
 
 #editor-container .editor-toolbar a.active,
 #editor-container .editor-toolbar a:hover {
   border: none;
-  color: var(--tg-text);
-  background: var(--tg-section-sep);
+  color: var(--app-text);
+  background: var(--app-section-sep);
 }
 
 #editor-container .CodeMirror-gutters {
-  background: var(--tg-bg);
-  border-right: 1px solid var(--tg-section-sep);
+  background: var(--app-bg);
+  border-right: 1px solid var(--app-section-sep);
 }
 
-#editor-container .CodeMirror-cursor { border-left-color: var(--tg-text); }
+#editor-container .CodeMirror-cursor { border-left-color: var(--app-text); }
 
-#editor-container .CodeMirror-selected { background: var(--tg-secondary) !important; }
+#editor-container .CodeMirror-selected { background: var(--app-secondary) !important; }
 
 #editor-container .editor-preview {
-  background: var(--tg-bg);
-  color: var(--tg-text);
+  background: var(--app-bg);
+  color: var(--app-text);
   padding: 12px 16px;
 }
 
 #editor-container .editor-preview-side {
-  border-left: 1px solid var(--tg-section-sep);
+  border-left: 1px solid var(--app-section-sep);
 }
 
 #editor-container .editor-statusbar {
-  color: var(--tg-hint);
-  border-top: 1px solid var(--tg-section-sep);
+  color: var(--app-hint);
+  border-top: 1px solid var(--app-section-sep);
   font-size: 12px;
 }
 
-#editor-container .CodeMirror-placeholder { color: var(--tg-hint); }
+#editor-container .CodeMirror-placeholder { color: var(--app-hint); }
 
 /* EasyMDE ships growing font sizes for in-editor headings (.cm-header-1…6);
    keep the editing surface typographically uniform — size changes belong to
@@ -837,7 +889,7 @@ input[type="checkbox"] {
 }
 
 #editor-container .editor-preview a.wiki-link {
-  color: var(--tg-link);
+  color: var(--app-link);
   text-decoration: underline;
 }
 
@@ -867,7 +919,7 @@ input[type="checkbox"] {
   max-height: 80vh;
   max-height: 80dvh;
   overflow-y: auto;
-  background: var(--tg-bg);
+  background: var(--app-bg);
   border-radius: var(--radius) var(--radius) 0 0;
   padding: 12px var(--pad) calc(16px + env(safe-area-inset-bottom));
   animation: sheet-in 0.2s ease;
@@ -893,7 +945,7 @@ input[type="checkbox"] {
 }
 
 .info-fields dt {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   white-space: nowrap;
 }
 
@@ -920,9 +972,9 @@ input[type="checkbox"] {
   width: 100%;
   padding: 10px 12px;
   margin-bottom: 10px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   font-size: 13px;
   word-break: break-all;
 }
@@ -930,16 +982,16 @@ input[type="checkbox"] {
 /* History sheet: commit cards, expandable version preview */
 .history-path {
   font-size: 13px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   word-break: break-all;
   margin: -6px 0 10px;
 }
 
 .history-warning {
   font-size: 13px;
-  color: var(--tg-text);
-  background: var(--tg-secondary);
-  border-left: 3px solid var(--tg-accent);
+  color: var(--app-text);
+  background: var(--app-secondary);
+  border-left: 3px solid var(--app-accent);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
   margin-bottom: 10px;
@@ -955,9 +1007,9 @@ input[type="checkbox"] {
 }
 
 .history-item {
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
 }
 
 .history-head {
@@ -979,7 +1031,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 .history-avatar {
@@ -990,7 +1042,7 @@ input[type="checkbox"] {
 }
 
 .history-author {
-  color: var(--tg-text);
+  color: var(--app-text);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1011,7 +1063,7 @@ input[type="checkbox"] {
 }
 
 .history-preview {
-  border-top: 1px solid var(--tg-section-sep);
+  border-top: 1px solid var(--app-section-sep);
   padding: 10px 12px 12px;
 }
 
@@ -1020,7 +1072,7 @@ input[type="checkbox"] {
   padding: 10px;
   max-height: 40vh;
   overflow: auto;
-  background: var(--tg-bg);
+  background: var(--app-bg);
   border-radius: var(--radius-sm);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
@@ -1031,7 +1083,7 @@ input[type="checkbox"] {
 
 .md-help-hint {
   font-size: 13px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   margin: 0 0 12px;
 }
 
@@ -1039,7 +1091,7 @@ input[type="checkbox"] {
 .md-help-list code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   padding: 1px 5px;
   border-radius: 5px;
   word-break: break-all;
@@ -1067,8 +1119,8 @@ input[type="checkbox"] {
   flex-shrink: 0;
   padding: 6px 12px;
   border-radius: var(--radius-sm);
-  background: var(--tg-button);
-  color: var(--tg-button-text);
+  background: var(--app-button);
+  color: var(--app-button-text);
   font-weight: 600;
   font-size: 13px;
 }
@@ -1086,7 +1138,7 @@ input[type="checkbox"] {
 
 /* Kanban interactivity */
 #editor-container .editor-preview .kanban-col.drag-over {
-  outline: 2px dashed var(--tg-button);
+  outline: 2px dashed var(--app-button);
   outline-offset: -2px;
 }
 
@@ -1104,8 +1156,8 @@ input[type="checkbox"] {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--tg-secondary);
-  color: var(--tg-link);
+  background: var(--app-secondary);
+  color: var(--app-link);
   font-size: 11px;
   line-height: 1;
   display: inline-flex;
@@ -1117,14 +1169,14 @@ input[type="checkbox"] {
   width: 100%;
   padding: 7px 0;
   border-radius: 8px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-size: 13px;
   text-align: center;
 }
 
 #editor-container .editor-preview .kanban-add:active {
-  background: var(--tg-section-sep);
-  color: var(--tg-text);
+  background: var(--app-section-sep);
+  color: var(--app-text);
 }
 
 .kanban-done-field {
@@ -1139,14 +1191,14 @@ input[type="checkbox"] {
 .field textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   outline: none;
   resize: vertical;
 }
 
-.field textarea:focus { border-color: var(--tg-button); }
+.field textarea:focus { border-color: var(--app-button); }
 
 /* Pull-to-refresh indicator */
 .pull-indicator {
@@ -1157,8 +1209,8 @@ input[type="checkbox"] {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--tg-secondary);
-  color: var(--tg-hint);
+  background: var(--app-secondary);
+  color: var(--app-hint);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1184,7 +1236,7 @@ input[type="checkbox"] {
   min-width: 38px;
   padding: 0 10px;
   border-radius: 16px;
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   font-size: 13px;
   font-weight: 600;
   margin-right: 6px;
@@ -1193,20 +1245,20 @@ input[type="checkbox"] {
 .move-select {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
-  color: var(--tg-text);
+  background: var(--app-secondary);
+  color: var(--app-text);
   font: inherit;
   outline: none;
 }
 
-.move-select:focus { border-color: var(--tg-button); }
+.move-select:focus { border-color: var(--app-button); }
 
 .link-results {
   max-height: 220px;
   overflow-y: auto;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
   margin-bottom: 14px;
 }
@@ -1219,11 +1271,11 @@ input[type="checkbox"] {
   width: 100%;
   text-align: left;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--tg-section-sep);
+  border-bottom: 1px solid var(--app-section-sep);
 }
 
 .link-result:last-child { border-bottom: none; }
-.link-result:active { background: var(--tg-secondary); }
+.link-result:active { background: var(--app-secondary); }
 
 .link-result-name {
   font-size: 14px;
@@ -1236,13 +1288,13 @@ input[type="checkbox"] {
 .link-result-dir {
   flex-shrink: 0;
   font-size: 12px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 .link-empty {
   padding: 16px 12px;
   text-align: center;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-size: 14px;
 }
 
@@ -1278,8 +1330,8 @@ input[type="checkbox"] {
   display: inline-block;
   padding: 0 8px;
   border-radius: 10px;
-  background: var(--tg-secondary);
-  color: var(--tg-link);
+  background: var(--app-secondary);
+  color: var(--app-link);
   font-size: 0.9em;
   text-decoration: none;
 }
@@ -1290,16 +1342,16 @@ input[type="checkbox"] {
 }
 
 #editor-container .editor-preview .dv-key {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9em;
 }
 
 #editor-container .editor-preview .dataview-block {
   padding: 8px 12px;
-  border: 1px dashed var(--tg-section-sep);
+  border: 1px dashed var(--app-section-sep);
   border-radius: var(--radius-sm);
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-size: 14px;
   margin: 8px 0;
 }
@@ -1318,13 +1370,13 @@ input[type="checkbox"] {
 
 #editor-container .editor-preview .dv-table th,
 #editor-container .editor-preview .dv-table td {
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   padding: 6px 10px;
   text-align: left;
 }
 
 #editor-container .editor-preview .dv-table th {
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
 }
 
 #editor-container .editor-preview .kanban {
@@ -1337,7 +1389,7 @@ input[type="checkbox"] {
 
 #editor-container .editor-preview .kanban-col {
   flex: 0 0 200px;
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   border-radius: var(--radius-sm);
   padding: 8px;
 }
@@ -1352,7 +1404,7 @@ input[type="checkbox"] {
   display: flex;
   gap: 6px;
   align-items: flex-start;
-  background: var(--tg-bg);
+  background: var(--app-bg);
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 6px;
@@ -1369,19 +1421,19 @@ input[type="checkbox"] {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-  border: 1.5px solid var(--tg-hint);
+  border: 1.5px solid var(--app-hint);
   border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
-  color: var(--tg-button-text);
+  color: var(--app-button-text);
   margin-top: 1px;
 }
 
 #editor-container .editor-preview .kanban-check.done {
-  background: var(--tg-button);
-  border-color: var(--tg-button);
+  background: var(--app-button);
+  border-color: var(--app-button);
 }
 
 /* ==========================================================================
@@ -1464,7 +1516,7 @@ input[type="checkbox"] {
   margin: 0;
   font-size: 13px;
   line-height: 1.45;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   overflow-wrap: anywhere;
 }
 
@@ -1514,7 +1566,7 @@ input[type="checkbox"] {
 
 .settings-divider {
   height: 1px;
-  background: var(--tg-section-sep);
+  background: var(--app-section-sep);
   margin: var(--space-2) 0;
   flex-shrink: 0;
 }
@@ -1541,7 +1593,7 @@ input[type="checkbox"] {
   min-width: 16px;
   height: 16px;
   border-radius: 8px;
-  background: var(--tg-destructive);
+  background: var(--app-destructive);
   color: #fff;
   font-size: 11px;
   line-height: 16px;
@@ -1554,9 +1606,9 @@ input[type="checkbox"] {
 
 /* YAML front-matter metadata card */
 #editor-container .editor-preview .front-matter {
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   padding: 10px 12px;
   margin-bottom: 14px;
   font-size: 13px;
@@ -1565,15 +1617,15 @@ input[type="checkbox"] {
 #editor-container .editor-preview .fm-row { padding: 2px 0; }
 
 #editor-container .editor-preview .fm-key {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* Obsidian callouts */
 #editor-container .editor-preview .callout {
   border-radius: var(--radius-sm);
-  border-left: 4px solid var(--tg-link);
-  background: var(--tg-secondary);
+  border-left: 4px solid var(--app-link);
+  background: var(--app-secondary);
   padding: 10px 12px;
   margin: 10px 0;
   font-size: 14px;
@@ -1629,8 +1681,8 @@ input[type="checkbox"] {
   word-break: normal;
   overflow-wrap: break-word;
   line-height: 1.5;
-  background: var(--tg-secondary);
-  color: var(--tg-text);
+  background: var(--app-secondary);
+  color: var(--app-text);
   border-radius: 8px;
   padding: 12px;
   font-size: 13px;
@@ -1645,7 +1697,7 @@ input[type="checkbox"] {
   gap: 4px;
   margin: 8px var(--pad) 0;
   padding: 3px;
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   border-radius: 10px;
 }
 
@@ -1659,12 +1711,12 @@ input[type="checkbox"] {
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 .explorer-tab.is-active {
-  background: var(--tg-bg);
-  color: var(--tg-text);
+  background: var(--app-bg);
+  color: var(--app-text);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
@@ -1672,8 +1724,8 @@ input[type="checkbox"] {
   min-width: 18px;
   padding: 1px 5px;
   border-radius: 9px;
-  background: var(--tg-button);
-  color: var(--tg-button-text);
+  background: var(--app-button);
+  color: var(--app-button-text);
   font-size: 11px;
   font-weight: 700;
   line-height: 16px;
@@ -1686,7 +1738,7 @@ input[type="checkbox"] {
 
 .activity-card {
   margin: 10px var(--pad) 0;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius);
   overflow: hidden;
 }
@@ -1703,11 +1755,11 @@ input[type="checkbox"] {
 
 .activity-summary {
   font-size: 13px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 .activity-chevron {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   font-size: 12px;
 }
 
@@ -1750,7 +1802,7 @@ input[type="checkbox"] {
   margin-top: 6px;
   justify-content: flex-end;
   font-size: 11px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 /* GitHub-like green ramps for light and dark environments. */
@@ -1785,15 +1837,15 @@ input[type="checkbox"] {
 .filter-chip {
   padding: 6px 14px;
   border-radius: 999px;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   font-size: 13px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 .filter-chip.is-active {
-  background: var(--tg-button);
-  border-color: var(--tg-button);
-  color: var(--tg-button-text);
+  background: var(--app-button);
+  border-color: var(--app-button);
+  color: var(--app-button-text);
 }
 
 .tasks-list {
@@ -1814,7 +1866,7 @@ input[type="checkbox"] {
   text-align: left;
   font-size: 13px;
   font-weight: 600;
-  color: var(--tg-hint);
+  color: var(--app-hint);
 }
 
 .task-group-name {
@@ -1828,7 +1880,7 @@ input[type="checkbox"] {
   min-width: 18px;
   padding: 1px 6px;
   border-radius: 9px;
-  background: var(--tg-secondary);
+  background: var(--app-secondary);
   font-size: 11px;
   font-weight: 700;
   line-height: 16px;
@@ -1840,7 +1892,7 @@ input[type="checkbox"] {
   align-items: flex-start;
   gap: 10px;
   padding: 9px 2px;
-  border-bottom: 1px solid var(--tg-section-sep);
+  border-bottom: 1px solid var(--app-section-sep);
 }
 
 .task-row:last-child {
@@ -1852,9 +1904,9 @@ input[type="checkbox"] {
   width: 22px;
   height: 22px;
   margin-top: 1px;
-  border: 2px solid var(--tg-hint);
+  border: 2px solid var(--app-hint);
   border-radius: 6px;
-  color: var(--tg-button-text);
+  color: var(--app-button-text);
   font-size: 14px;
   font-weight: 700;
   line-height: 18px;
@@ -1862,8 +1914,8 @@ input[type="checkbox"] {
 }
 
 .task-row.is-done .task-check {
-  background: var(--tg-button);
-  border-color: var(--tg-button);
+  background: var(--app-button);
+  border-color: var(--app-button);
 }
 
 .task-text {
@@ -1875,7 +1927,7 @@ input[type="checkbox"] {
 }
 
 .task-row.is-done .task-text {
-  color: var(--tg-hint);
+  color: var(--app-hint);
   text-decoration: line-through;
 }
 
@@ -1892,13 +1944,13 @@ input[type="checkbox"] {
 .repo-item {
   display: flex;
   align-items: stretch;
-  border: 1px solid var(--tg-section-sep);
+  border: 1px solid var(--app-section-sep);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .repo-item.active {
-  border-color: var(--tg-button);
+  border-color: var(--app-button);
 }
 
 .repo-item-main {
@@ -1922,13 +1974,13 @@ input[type="checkbox"] {
 }
 
 .repo-item-check {
-  color: var(--tg-button);
+  color: var(--app-button);
   font-weight: 700;
 }
 
 .repo-item-sub {
   font-size: 13px;
-  color: var(--tg-hint);
+  color: var(--app-hint);
   overflow-wrap: anywhere;
 }
 
@@ -1938,13 +1990,13 @@ input[type="checkbox"] {
   justify-content: center;
   width: 44px; /* comfortable touch target for the pencil */
   padding: 0;
-  color: var(--tg-hint);
-  border-left: 1px solid var(--tg-section-sep);
+  color: var(--app-hint);
+  border-left: 1px solid var(--app-section-sep);
 }
 
 .repo-item-edit:active {
-  background: var(--tg-section-sep);
-  color: var(--tg-text);
+  background: var(--app-section-sep);
+  color: var(--app-text);
 }
 
 .repo-form-actions {
@@ -1954,5 +2006,5 @@ input[type="checkbox"] {
 }
 
 .btn-danger-text {
-  color: var(--tg-destructive);
+  color: var(--app-destructive);
 }

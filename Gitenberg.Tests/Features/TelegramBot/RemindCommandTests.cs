@@ -106,12 +106,12 @@ public class RemindCommandTests
         return db;
     }
 
-    private static Message CreateCommand(string text, long telegramId = 42)
+    private static Message CreateCommand(string text, long userId = 42)
     {
         return new Message
         {
-            From = new BotUser { Id = telegramId, IsBot = false, FirstName = "Tester" },
-            Chat = new Chat { Id = telegramId, Type = ChatType.Private },
+            From = new BotUser { Id = userId, IsBot = false, FirstName = "Tester" },
+            Chat = new Chat { Id = userId, Type = ChatType.Private },
             Date = DateTime.UtcNow,
             Text = text,
         };

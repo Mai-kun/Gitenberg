@@ -40,8 +40,8 @@ public class NotesEndpointsTests
     private IRepositoryContextResolver CreateResolver(AppDbContext db) =>
         new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance);
 
-    private static int ActiveRepoId(AppDbContext db, long telegramId) =>
-        db.Repositories.Where(r => r.TelegramUserId == telegramId).OrderBy(r => r.Id).First().Id;
+    private static int ActiveRepoId(AppDbContext db, long userId) =>
+        db.Repositories.Where(r => r.TelegramUserId == userId).OrderBy(r => r.Id).First().Id;
 
     private static PendingSyncService CreatePendingSync(AppDbContext db)
     {
@@ -572,11 +572,11 @@ public class NotesEndpointsTests
         callCount.Should().Be(2);
     }
 
-    private async Task<User> CreateUserAsync(AppDbContext db, long telegramId, string token = "pat_123")
+    private async Task<User> CreateUserAsync(AppDbContext db, long userId, string token = "pat_123")
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -585,7 +585,7 @@ public class NotesEndpointsTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/repo",
             RepositoryOwner = "owner",
             RepositoryName = "repo",
@@ -689,8 +689,8 @@ public class NotesEndpointsTests
         var callsPerUser = new Dictionary<long, int>();
         _gitHubService.GetNotesFunc = (ctx, _) =>
         {
-            var telegramId = ctx.Token == "pat_user1" ? 11111 : 22222;
-            callsPerUser[telegramId] = callsPerUser.GetValueOrDefault(telegramId) + 1;
+            var userId = ctx.Token == "pat_user1" ? 11111 : 22222;
+            callsPerUser[userId] = callsPerUser.GetValueOrDefault(userId) + 1;
             return Task.FromResult<IReadOnlyList<RepositoryContent>>(new List<RepositoryContent> { CreateNote("note1.md") });
         };
 

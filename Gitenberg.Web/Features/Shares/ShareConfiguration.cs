@@ -11,9 +11,9 @@ public static class ShareLinkUrlBuilder
 {
     public const string PathPrefix = "/share/";
 
-    public static string BuildUrl(string? publicBaseUrl, string hostAddress, string token)
+    public static string BuildUrl(string? publicBaseUrl, string fallbackBaseUrl, string token)
     {
-        var baseHost = !string.IsNullOrWhiteSpace(publicBaseUrl) ? publicBaseUrl : hostAddress;
+        var baseHost = !string.IsNullOrWhiteSpace(publicBaseUrl) ? publicBaseUrl : fallbackBaseUrl;
         return $"{(baseHost ?? string.Empty).TrimEnd('/')}{PathPrefix}{Uri.EscapeDataString(token)}";
     }
 }

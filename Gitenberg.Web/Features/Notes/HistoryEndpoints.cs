@@ -1,7 +1,7 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
 using Gitenberg.Web.Features.Sync;
-using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -17,7 +17,7 @@ public static class HistoryEndpoints
     {
         var group = app.MapGroup("/api/notes")
                        .WithTags("Notes")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapGet("/history", GetNoteHistory)
              .WithName("GetNoteHistory")
@@ -34,8 +34,6 @@ public static class HistoryEndpoints
 
     public static async Task<IResult> GetNoteHistory(
         [FromQuery] string path,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
@@ -43,14 +41,14 @@ public static class HistoryEndpoints
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -60,13 +58,13 @@ public static class HistoryEndpoints
             return Results.BadRequest(new { Error = "Path parameter is required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
@@ -84,7 +82,7 @@ public static class HistoryEndpoints
 
         // Remote history does not include unsynced local changes; the UI shows
         // a warning instead of silently hiding them.
-        var ops = await pendingSync.GetOpsAsync(telegramId.Value, repository.RepositoryId);
+        var ops = await pendingSync.GetOpsAsync(userId.Value, repository.RepositoryId);
         var overlay = pendingSync.GetContentOverlay(ops, path.Trim('/'));
         var hasPendingChanges = overlay.Found || overlay.Deleted;
 
@@ -94,22 +92,20 @@ public static class HistoryEndpoints
     public static async Task<IResult> GetNoteVersionContent(
         [FromQuery] string path,
         [FromQuery] string sha,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -124,13 +120,13 @@ public static class HistoryEndpoints
             return Results.BadRequest(new { Error = "Sha parameter is required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
@@ -153,25 +149,22 @@ public static class HistoryEndpoints
 
     public static async Task<IResult> RestoreNoteVersion(
         [FromBody] RestoreNoteVersionRequest? request,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         IRepositoryContextResolver repositoryResolver,
         IGitHubService gitHubService,
         PendingSyncService pendingSync,
         IMemoryCache memoryCache,
-        Reminders.ReminderService reminderService,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
                 new
                 {
                     Error =
-                        "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter.",
+                        "No authenticated user: sign in with a GitHub token first.",
                 }
             );
         }
@@ -183,13 +176,13 @@ public static class HistoryEndpoints
             return Results.BadRequest(new { Error = "Both 'Path' and 'Sha' are required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });
@@ -212,10 +205,8 @@ public static class HistoryEndpoints
         var cleanPath = request.Path.Trim('/');
         var commitMessage = $"Restore note: {cleanPath} (← {shortSha})";
         // Local-first: restoring is a regular save op, pushed to GitHub by sync.
-        await pendingSync.EnqueueAsync(telegramId.Value, repository.RepositoryId, "save", request.Path, null, content, commitMessage);
-        NotesEndpoints.BustUserCache(memoryCache, telegramId.Value, repository.RepositoryId);
-        // Restored content may add or remove "@remind" markers — reconcile.
-        await reminderService.UpsertForNoteAsync(telegramId.Value, repository.RepositoryId, request.Path, content);
+        await pendingSync.EnqueueAsync(userId.Value, repository.RepositoryId, "save", request.Path, null, content, commitMessage);
+        NotesEndpoints.BustUserCache(memoryCache, userId.Value, repository.RepositoryId);
 
         return Results.Ok(
             new

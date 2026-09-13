@@ -2,6 +2,8 @@
 
 public class User
 {
+    // Internal user key. Historically the Telegram user id; the web app stores
+    // the GitHub user id here instead, so the column name lives on.
     public long TelegramId { get; set; }
 
     // Legacy single-repo columns: kept in the schema for migration

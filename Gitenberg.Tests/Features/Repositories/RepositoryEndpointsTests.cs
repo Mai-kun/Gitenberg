@@ -47,7 +47,7 @@ public class RepositoryEndpointsTests
 
     private async Task<(User User, Repository Repository)> SeedUserWithRepositoryAsync(
         AppDbContext db,
-        long telegramId = 12345,
+        long userId = 12345,
         string owner = "owner",
         string repo = "first",
         string? token = "token_1",
@@ -57,7 +57,7 @@ public class RepositoryEndpointsTests
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -66,7 +66,7 @@ public class RepositoryEndpointsTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = $"{owner}/{repo}",
             RepositoryOwner = owner,
             RepositoryName = repo,
@@ -244,7 +244,7 @@ public class RepositoryEndpointsTests
     {
         await using var db = CreateInMemoryDbContext();
         var (_, repository) = await SeedUserWithRepositoryAsync(db);
-        await SeedUserWithRepositoryAsync(db, telegramId: 99999, owner: "o", repo: "r2");
+        await SeedUserWithRepositoryAsync(db, userId: 99999, owner: "o", repo: "r2");
         var request = new UpdateRepositoryRequest(null, null, "owner", "first");
 
         var result = await RepositoriesEndpoints.UpdateRepository(repository.Id, request, null, 99999, db, _encryptionService);
@@ -286,7 +286,7 @@ public class RepositoryEndpointsTests
     {
         await using var db = CreateInMemoryDbContext();
         var (_, first) = await SeedUserWithRepositoryAsync(db);
-        var (otherUser, otherRepo) = await SeedUserWithRepositoryAsync(db, telegramId: 99999, owner: "o", repo: "r2");
+        var (otherUser, otherRepo) = await SeedUserWithRepositoryAsync(db, userId: 99999, owner: "o", repo: "r2");
 
         var result = await RepositoriesEndpoints.ActivateRepository(first.Id, null, 99999, db);
 

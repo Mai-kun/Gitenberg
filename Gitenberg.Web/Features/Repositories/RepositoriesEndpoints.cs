@@ -1,6 +1,6 @@
 using Gitenberg.Web.Database;
 using Gitenberg.Web.DTOs.Requests;
-using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -15,7 +15,7 @@ public static class RepositoriesEndpoints
     {
         var group = app.MapGroup("/api/repositories")
                        .WithTags("Repositories")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapGet("/", ListRepositories)
              .WithName("ListRepositories")
@@ -43,27 +43,25 @@ public static class RepositoriesEndpoints
     }
 
     public static async Task<IResult> ListRepositories(
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
         var repositories = await dbContext.Repositories
-            .Where(r => r.TelegramUserId == telegramId)
+            .Where(r => r.TelegramUserId == userId)
             .OrderBy(r => r.Id)
             .ToListAsync();
 
@@ -72,18 +70,16 @@ public static class RepositoriesEndpoints
 
     public static async Task<IResult> CreateRepository(
         [FromBody] CreateRepositoryRequest? request,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
         if (request == null)
@@ -106,13 +102,13 @@ public static class RepositoriesEndpoints
             return Results.BadRequest(new { Error = "Repository name is required." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var count = await dbContext.Repositories.CountAsync(r => r.TelegramUserId == telegramId);
+        var count = await dbContext.Repositories.CountAsync(r => r.TelegramUserId == userId);
         if (count >= MaxRepositoriesPerUser)
         {
             return Results.BadRequest(
@@ -121,7 +117,7 @@ public static class RepositoriesEndpoints
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId.Value,
+            TelegramUserId = userId.Value,
             DisplayName = string.IsNullOrWhiteSpace(request.DisplayName)
                 ? $"{request.RepositoryOwner}/{request.RepositoryName}"
                 : request.DisplayName.Trim(),
@@ -150,18 +146,16 @@ public static class RepositoriesEndpoints
     public static async Task<IResult> UpdateRepository(
         [FromRoute] int id,
         [FromBody] UpdateRepositoryRequest? request,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
         if (request == null)
@@ -180,7 +174,7 @@ public static class RepositoriesEndpoints
         }
 
         var repository = await dbContext.Repositories
-            .FirstOrDefaultAsync(r => r.Id == id && r.TelegramUserId == telegramId);
+            .FirstOrDefaultAsync(r => r.Id == id && r.TelegramUserId == userId);
         if (repository == null)
         {
             return Results.NotFound(new { Error = $"Repository {id} not found." });
@@ -203,49 +197,47 @@ public static class RepositoriesEndpoints
 
         await dbContext.SaveChangesAsync();
 
-        var user = await dbContext.Users.FirstAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstAsync(u => u.TelegramId == userId);
         return Results.Ok(ToDto(repository, user.SelectedRepositoryId));
     }
 
     public static async Task<IResult> DeleteRepository(
         [FromRoute] int id,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
         var repository = await dbContext.Repositories
-            .FirstOrDefaultAsync(r => r.Id == id && r.TelegramUserId == telegramId);
+            .FirstOrDefaultAsync(r => r.Id == id && r.TelegramUserId == userId);
         if (repository == null)
         {
             return Results.NotFound(new { Error = $"Repository {id} not found." });
         }
 
-        var total = await dbContext.Repositories.CountAsync(r => r.TelegramUserId == telegramId);
+        var total = await dbContext.Repositories.CountAsync(r => r.TelegramUserId == userId);
         if (total <= 1)
         {
             return Results.BadRequest(new { Error = "Cannot delete the last remaining repository." });
         }
 
         // Cascade cleanup of everything scoped to this repository.
-        var uid = telegramId.Value.ToString();
+        var uid = userId.Value.ToString();
         var rid = id.ToString();
         await dbContext.IndexedNotes
-            .Where(n => n.TelegramUserId == telegramId && n.RepositoryId == id)
+            .Where(n => n.TelegramUserId == userId && n.RepositoryId == id)
             .ExecuteDeleteAsync();
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"DELETE FROM NoteSearchFts WHERE TelegramUserId = {uid} AND RepositoryId = {rid}");
@@ -265,7 +257,7 @@ public static class RepositoriesEndpoints
         if (user.SelectedRepositoryId == id)
         {
             user.SelectedRepositoryId = await dbContext.Repositories
-                .Where(r => r.TelegramUserId == telegramId)
+                .Where(r => r.TelegramUserId == userId)
                 .OrderBy(r => r.Id)
                 .Select(r => (int?)r.Id)
                 .FirstOrDefaultAsync();
@@ -277,27 +269,25 @@ public static class RepositoriesEndpoints
 
     public static async Task<IResult> ActivateRepository(
         [FromRoute] int id,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
         var repository = await dbContext.Repositories
-            .FirstOrDefaultAsync(r => r.Id == id && r.TelegramUserId == telegramId);
+            .FirstOrDefaultAsync(r => r.Id == id && r.TelegramUserId == userId);
         if (repository == null)
         {
             return Results.NotFound(new { Error = $"Repository {id} not found." });
@@ -316,19 +306,17 @@ public static class RepositoriesEndpoints
     // typed token) or from the stored encrypted token of a saved repository.
     public static async Task<IResult> ListRepositoryFolders(
         [FromBody] RepositoryFoldersRequest? request,
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         AppDbContext dbContext,
         ITokenEncryptionService encryptionService,
         IGitHubService gitHubService,
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
         if (request == null)
@@ -354,7 +342,7 @@ public static class RepositoriesEndpoints
         else if (request.RepositoryId != null)
         {
             var repository = await dbContext.Repositories
-                .FirstOrDefaultAsync(r => r.Id == request.RepositoryId && r.TelegramUserId == telegramId);
+                .FirstOrDefaultAsync(r => r.Id == request.RepositoryId && r.TelegramUserId == userId);
             if (repository?.GitHubToken == null)
             {
                 return Results.NotFound(new { Error = $"Repository {request.RepositoryId} not found." });

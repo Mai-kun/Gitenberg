@@ -94,7 +94,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             """);
 
         BackfillRepositoryIdColumn("PendingNoteOps");
-        BackfillRepositoryIdColumn("Reminders");
 
         RebuildIndexedNotesWithRepositoryId();
         RebuildNoteSearchFtsWithRepositoryId();

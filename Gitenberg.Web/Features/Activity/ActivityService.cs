@@ -27,9 +27,9 @@ public class ActivityService(AppDbContext dbContext)
         return localNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
-    public async Task RecordAsync(long telegramId, int? clientTzOffsetMinutes, DateTime? utcNow = null)
+    public async Task RecordAsync(long userId, int? clientTzOffsetMinutes, DateTime? utcNow = null)
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var day = ResolveDayKey(clientTzOffsetMinutes, utcNow);
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO ActivityDays (TelegramUserId, ActivityDate, Count)
@@ -39,14 +39,14 @@ public class ActivityService(AppDbContext dbContext)
     }
 
     public async Task<List<ActivityDay>> GetHeatmapAsync(
-        long telegramId,
+        long userId,
         int? clientTzOffsetMinutes,
         int days = 371,
         DateOnly? from = null,
         DateOnly? to = null
     )
     {
-        var uid = telegramId.ToString(CultureInfo.InvariantCulture);
+        var uid = userId.ToString(CultureInfo.InvariantCulture);
         var todayLocal = DateOnly.FromDateTime(DateTime.UtcNow.AddMinutes(-(clientTzOffsetMinutes ?? -180)));
         var startDay = (from ?? todayLocal.AddDays(-(days - 1))).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var endDay = (to ?? todayLocal).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

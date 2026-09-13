@@ -1,5 +1,5 @@
 using Gitenberg.Web.Database;
-using Gitenberg.Web.Features.TelegramBot.Auth;
+using Gitenberg.Web.Features.Auth;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -13,7 +13,7 @@ public static class ExportEndpoints
     {
         var group = app.MapGroup("/api/export")
                        .WithTags("Export")
-                       .RequireTelegramAuth();
+                       .RequireAuth();
 
         group.MapGet("/archive", DownloadArchive)
              .WithName("ExportArchive")
@@ -21,8 +21,6 @@ public static class ExportEndpoints
     }
 
     public static async Task<IResult> DownloadArchive(
-        [FromHeader(Name = "X-Telegram-Id")] long? headerTelegramId,
-        [FromQuery(Name = "telegramId")] long? queryTelegramId,
         [FromQuery(Name = "reference")] string? reference,
         AppDbContext dbContext,
         IGitHubService gitHubService,
@@ -30,20 +28,20 @@ public static class ExportEndpoints
         HttpContext? httpContext = null
     )
     {
-        var telegramId = TelegramAuthResolver.Resolve(httpContext, headerTelegramId, queryTelegramId);
-        if (telegramId == null)
+        var userId = CurrentUserId.From(httpContext);
+        if (userId == null)
         {
             return Results.BadRequest(
-                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'telegramId' query parameter." });
+                new { Error = "Telegram ID is required. Provide it in 'X-Telegram-Id' header or 'userId' query parameter." });
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId);
+        var user = await dbContext.Users.FirstOrDefaultAsync(u => u.TelegramId == userId);
         if (user == null)
         {
-            return Results.NotFound(new { Error = $"User with Telegram ID {telegramId} not found." });
+            return Results.NotFound(new { Error = $"User with Telegram ID {userId} not found." });
         }
 
-        var repository = await repositoryResolver.ResolveActiveAsync(telegramId.Value);
+        var repository = await repositoryResolver.ResolveActiveAsync(userId.Value);
         if (repository == null)
         {
             return Results.BadRequest(new { Error = "GitHub repository is not configured for this user." });

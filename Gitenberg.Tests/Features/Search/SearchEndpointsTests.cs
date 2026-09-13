@@ -41,11 +41,11 @@ public class SearchEndpointsTests
         return dbContext;
     }
 
-    private async Task SeedUserAsync(AppDbContext db, long telegramId)
+    private async Task SeedUserAsync(AppDbContext db, long userId)
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -54,7 +54,7 @@ public class SearchEndpointsTests
 
         var repository = new Gitenberg.Web.Models.Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/repo",
             RepositoryOwner = "owner",
             RepositoryName = "repo",

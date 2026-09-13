@@ -1,5 +1,4 @@
-// Gitenberg Mini App: SPA state, screen routing (Register / Explorer / Editor)
-// and Telegram WebApp integration.
+// Gitenberg web app: SPA state and screen routing (Login / Explorer / Editor).
 
 import * as api from './api.js';
 import * as editor from './editor.js';
@@ -21,95 +20,12 @@ const KEBAB_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12"
 const PIN_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
 
 // ---------------------------------------------------------------------------
-// Telegram helpers
+// Confirm dialog: window.confirm wrapped as a promise so call sites can await.
 // ---------------------------------------------------------------------------
 
-const tg = () => window.Telegram?.WebApp ?? null;
-
-function haptic(type, ...args) {
-  try {
-    if (type === 'success' || type === 'error' || type === 'warning') {
-      tg()?.HapticFeedback?.notificationOccurred(type);
-    } else if (type === 'select') {
-      tg()?.HapticFeedback?.selectionChanged();
-    } else if (type === 'impact') {
-      tg()?.HapticFeedback?.impactOccurred(args[0] ?? 'light');
-    }
-  } catch {
-    /* haptics unavailable */
-  }
-}
-
-// True when the page runs inside a real Telegram client. Outside Telegram
-// the SDK stub reports platform 'unknown' and renders no MainButton, so
-// in-page fallback controls must stay visible there.
-function isTelegramClient() {
-  const webApp = tg();
-  return Boolean(webApp && webApp.platform && webApp.platform !== 'unknown');
-}
-
 function showConfirm(message) {
-  const webApp = tg();
-  // Outside Telegram the SDK still exposes a WebApp stub whose showConfirm
-  // throws WebAppMethodUnsupported — detect the stub and fall back to
-  // window.confirm, otherwise deletion would silently hang on an
-  // unresolved promise.
-  if (webApp?.showConfirm && webApp.platform !== 'unknown') {
-    try {
-      return new Promise((resolve) => webApp.showConfirm(message, resolve));
-    } catch {
-      /* fall through to window.confirm */
-    }
-  }
   return Promise.resolve(window.confirm(message));
 }
-
-// MainButton: editor-only "Сохранить". The click handler is swapped via
-// offClick before every onClick so repeated open/save cycles never stack.
-const mainButton = {
-  show(label, onClick, options = {}) {
-    const mb = tg()?.MainButton;
-    if (!mb) return;
-    if (typeof mb.offClick === 'function') mb.offClick(mainButton._handler);
-    mainButton._handler = onClick;
-    mb.setText(label);
-    mb.onClick(onClick);
-    if (options.color && mb.setParams) {
-      mb.setParams({ color: options.color });
-    }
-    mb.show();
-  },
-  hide() {
-    const mb = tg()?.MainButton;
-    if (!mb) return;
-    if (typeof mb.offClick === 'function' && mainButton._handler) {
-      mb.offClick(mainButton._handler);
-      mainButton._handler = null;
-    }
-    mb.hide();
-  },
-};
-
-// BackButton: visible everywhere except the explorer root.
-const backButton = {
-  show(onClick) {
-    const bb = tg()?.BackButton;
-    if (!bb) return;
-    if (typeof bb.offClick === 'function') bb.offClick(backButton._handler);
-    backButton._handler = onClick;
-    bb.onClick(onClick);
-    bb.show();
-  },
-  hide() {
-    const bb = tg()?.BackButton;
-    if (!bb) return;
-    if (typeof bb.offClick === 'function' && backButton._handler) {
-      bb.offClick(backButton._handler);
-      backButton._handler = null;
-    }
-    bb.hide();
-  },
-};
 
 // ---------------------------------------------------------------------------
 // DOM handles & shared state
@@ -118,8 +34,6 @@ const backButton = {
 const $ = (id) => document.getElementById(id);
 
 const els = {
-  devBar: $('dev-bar'),
-  devTelegramId: $('dev-telegram-id'),
   views: {
     register: $('view-register'),
     explorer: $('view-explorer'),
@@ -237,6 +151,7 @@ const els = {
   settingsError: $('settings-error'),
   settingsSave: $('settings-save'),
   btnExport: $('btn-export'),
+  btnSignout: $('btn-signout'),
   settingsBack: $('btn-settings-back'),
   settingsAutosyncInterval: $('settings-autosync-interval'),
   autosyncIntervalField: $('autosync-interval-field'),
@@ -356,7 +271,6 @@ function friendlyErrorText(error) {
 function showErrorToast(error) {
   if (isNetworkError(error)) {
     showToast(`${STRINGS.errorPrefix}: ${STRINGS.networkError}`);
-    haptic('error');
     return;
   }
   let message = STRINGS.loadFailed;
@@ -366,7 +280,6 @@ function showErrorToast(error) {
     message = error;
   }
   showToast(`${STRINGS.errorPrefix}: ${message}`);
-  haptic('error');
 }
 
 function escapeHtml(text) {
@@ -394,30 +307,6 @@ function normPath(path) {
 // Register view
 // ---------------------------------------------------------------------------
 
-function currentTelegramId() {
-  const fromTg = tg()?.initDataUnsafe?.user?.id;
-  if (Number.isFinite(fromTg) && fromTg > 0) return fromTg;
-  return api.getDevTelegramId();
-}
-
-function syncDevBar() {
-  els.devBar.hidden = api.isInsideTelegram();
-  if (!els.devBar.hidden) {
-    els.devTelegramId.value = String(api.getDevTelegramId());
-  }
-}
-
-els.devTelegramId.addEventListener('change', () => {
-  const value = Number(els.devTelegramId.value);
-  if (!Number.isFinite(value) || value <= 0) {
-    showToast(STRINGS.telegramIdInvalid);
-    els.devTelegramId.value = String(api.getDevTelegramId());
-    return;
-  }
-  api.setDevTelegramId(value);
-  restartProbe();
-});
-
 els.registerForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   setError(els.registerError, '');
@@ -434,19 +323,15 @@ els.registerForm.addEventListener('submit', async (event) => {
 
   setButtonBusy(els.registerSubmit, true, STRINGS.registerBtnBusy, STRINGS.registerBtnIdle);
   try {
-    await api.registerUser(currentTelegramId(), token, owner, repo, {
+    await api.login(token, owner, repo, {
       inboxPath: inboxPath || undefined,
       attachmentsPath: attachmentsPath || undefined,
     });
-    haptic('success');
     await enterExplorer('');
   } catch (error) {
-    if (error instanceof api.ApiError && error.status === 401) {
-      setError(els.registerError, STRINGS.authFailed);
-    } else {
-      setError(els.registerError, error instanceof api.ApiError ? error.message : STRINGS.registerFailed);
-    }
-    haptic('error');
+    // The backend returns descriptive messages for both a rejected token and
+    // a repository without access; surface them as-is.
+    setError(els.registerError, error instanceof api.ApiError ? error.message : STRINGS.registerFailed);
   } finally {
     setButtonBusy(els.registerSubmit, false, STRINGS.registerBtnBusy, STRINGS.registerBtnIdle);
   }
@@ -479,7 +364,6 @@ function renderFolderSuggestions(container, input, folders) {
     chip.addEventListener('click', () => {
       input.value = folder;
       container.hidden = true;
-      haptic('select');
     });
     container.append(chip);
   }
@@ -720,8 +604,7 @@ function renderNotes(items, pinnedPaths = new Set()) {
       // Non-markdown files are opened on GitHub instead of the editor.
       row.addEventListener('click', () => {
         if (!item.htmlUrl) return;
-        if (isTelegramClient()) tg()?.openLink?.(item.htmlUrl);
-        else window.open(item.htmlUrl, '_blank', 'noopener');
+        window.open(item.htmlUrl, '_blank', 'noopener');
       });
     }
 
@@ -768,7 +651,6 @@ async function loadFolder(path) {
   hideSearchResults();
   skeletonRows();
   setStatus('');
-  updateBackButton();
 
   try {
     const [items, pinnedPaths] = await Promise.all([
@@ -792,34 +674,7 @@ async function loadFolder(path) {
 
 async function enterExplorer(path) {
   showView('explorer');
-  mainButton.hide();
   await loadFolder(normPath(path));
-}
-
-function updateBackButton() {
-  const inEditor = !els.views.editor.hidden;
-  if (inEditor || state.currentPath !== '') {
-    backButton.show(handleBackNavigation);
-  } else {
-    backButton.hide();
-  }
-}
-
-function handleBackNavigation() {
-  if (!els.views.editor.hidden) {
-    void leaveEditor();
-    return;
-  }
-  if (!els.views.settings.hidden) {
-    // Same behavior as the in-page settings back arrow.
-    void enterExplorer(state.currentPath);
-    return;
-  }
-  if (state.currentPath !== '') {
-    const segments = state.currentPath.split('/').filter(Boolean);
-    segments.pop();
-    void enterExplorer(segments.join('/'));
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1307,11 +1162,9 @@ function showTab(tab) {
 }
 
 els.tabNotes.addEventListener('click', () => {
-  haptic('select');
   showTab('notes');
 });
 els.tabTasks.addEventListener('click', () => {
-  haptic('select');
   showTab('tasks');
 });
 els.tasksFilterActive.addEventListener('click', () => {
@@ -1328,7 +1181,6 @@ els.tasksFilterAll.addEventListener('click', () => {
 });
 
 function toggleTask(task) {
-  haptic('select');
   const wasChecked = task.checked;
   task.checked = !wasChecked; // optimistic flip
   updateTasksBadge();
@@ -1348,7 +1200,6 @@ function toggleTask(task) {
       invalidateCaches();
       void refreshHeatmap();
       void refreshSyncBadge();
-      haptic('success');
     } catch (error) {
       task.checked = wasChecked; // revert on failure
       updateTasksBadge();
@@ -1362,39 +1213,12 @@ function toggleTask(task) {
 }
 
 // ---------------------------------------------------------------------------
-// Reminder deep link (t.me startapp payload) → open the note directly
+// Deep link: /?note=<path> opens that note after the explorer loads
 // ---------------------------------------------------------------------------
 
-function decodeStartParam(raw) {
-  try {
-    let base64 = String(raw).replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
-  } catch {
-    return null;
-  }
-}
-
-// Returns the note target encoded in the launch link: { repositoryId, path }
-// for the new "note:<repoId>:<path>" payload (legacy "note:<path>" →
-// repositoryId null, resolved to the active repository), or null.
-function noteTargetFromStartParam() {
-  const raw = tg()?.initDataUnsafe?.start_param;
-  if (!raw) return null;
-  const payload = decodeStartParam(raw);
-  if (!payload || !payload.startsWith('note:')) return null;
-  const body = payload.slice(5);
-  const sep = body.indexOf(':');
-  if (sep > 0) {
-    const repositoryId = Number(body.slice(0, sep));
-    const path = normPath(body.slice(sep + 1));
-    if (Number.isInteger(repositoryId) && repositoryId > 0 && path) {
-      return { repositoryId, path };
-    }
-  }
-  const path = normPath(body);
-  return path ? { repositoryId: null, path } : null;
+function noteTargetFromUrl() {
+  const path = normPath(new URLSearchParams(window.location.search).get('note') ?? '');
+  return path ? { path } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1603,13 +1427,6 @@ function openEditor(mode, path, draft = null) {
 
   showView('editor');
   els.searchInput.blur();
-  updateBackButton();
-
-  mainButton.show(STRINGS.saveBtnIdle, () => void saveCurrentNote());
-  // Inside Telegram the MainButton above is the save control — a second,
-  // in-page button would duplicate it. Outside Telegram the MainButton
-  // renders nothing, so the in-page button is the only way to save.
-  els.editorActions.hidden = isTelegramClient();
   setButtonBusy(els.btnEditorSave, false, STRINGS.saveBtnBusy, STRINGS.saveBtnIdle);
 
   if (mode === 'edit') {
@@ -1669,7 +1486,6 @@ async function leaveEditor({ force = false } = {}) {
     const ok = await showConfirm(STRINGS.confirmDiscard);
     if (!ok) return;
   }
-  mainButton.hide();
   resetEditorDraft();
   await enterExplorer(state.currentPath);
 }
@@ -1719,19 +1535,16 @@ async function saveCurrentNote() {
   const path = validateNotePath(els.notePath.value);
   if (!path) {
     setError(els.editorStatus, STRINGS.invalidPath);
-    haptic('error');
     return;
   }
 
   const overwrites = state.editor.mode === 'create' || path !== state.editor.path;
   if (overwrites && !(await confirmOverwriteIfNeeded(path))) {
-    haptic('error');
     return;
   }
 
   const content = editor.getValue();
   setButtonBusy(els.btnEditorSave, true, STRINGS.saveBtnBusy, STRINGS.saveBtnIdle);
-  mainButton.show(STRINGS.saveBtnBusy, () => {}, { color: '#999999' });
 
   try {
     const originalPath = state.editor.mode === 'edit' ? state.editor.path : null;
@@ -1739,11 +1552,9 @@ async function saveCurrentNote() {
       // Path changed in the editor → move (rename): write the new content to
       // the new location and remove the old file.
       await api.moveNote(originalPath, path, content);
-      haptic('success');
       showToast(STRINGS.moved);
     } else {
       await api.saveNote(path, content);
-      haptic('success');
       showToast(STRINGS.saved);
     }
     invalidateCaches();
@@ -1762,7 +1573,6 @@ async function saveCurrentNote() {
     state.currentPath = folder;
     await enterExplorer(folder);
   } catch (error) {
-    mainButton.show(STRINGS.saveBtnIdle, () => void saveCurrentNote());
     setButtonBusy(els.btnEditorSave, false, STRINGS.saveBtnBusy, STRINGS.saveBtnIdle);
     showErrorToast(error);
   }
@@ -2042,7 +1852,6 @@ async function togglePin(item) {
   try {
     await (isPinned ? api.unpinItem(path) : api.pinItem(path));
     invalidatePins();
-    haptic('success');
     showToast(isPinned ? STRINGS.unpinnedToast : STRINGS.pinnedToast);
     closeInfoModal();
     await loadFolder(state.currentPath);
@@ -2129,7 +1938,6 @@ els.shareCopy.addEventListener('click', async () => {
     }
   }
   if (copied) {
-    haptic('success');
     showToast(STRINGS.shareCopied);
   } else {
     els.shareLink.focus();
@@ -2144,7 +1952,6 @@ els.shareRevoke.addEventListener('click', () => {
     if (!ok) return;
     try {
       await api.revokeShareLink(state.shareToken);
-      haptic('success');
       showToast(STRINGS.shareRevoked);
       state.shareToken = null;
       els.shareLink.hidden = true;
@@ -2462,7 +2269,6 @@ async function submitMove() {
 
   try {
     await api.moveNote(fromPath, toPath);
-    haptic('success');
     showToast(STRINGS.moved);
     closeMoveModal();
     invalidateCaches();
@@ -2482,7 +2288,6 @@ async function submitMove() {
     }
   } catch (error) {
     setError(els.moveError, error instanceof Error && error.message ? error.message : STRINGS.loadFailed);
-    haptic('error');
   }
 }
 
@@ -2609,9 +2414,7 @@ document.addEventListener('tag-click', async (event) => {
   const tag = String(event.detail?.tag || '').trim();
   if (!tag) return;
   if (!(await confirmLeaveEditorIfDirty())) return;
-  mainButton.hide();
   showView('explorer');
-  updateBackButton();
   els.searchInput.value = `#${tag}`;
   els.searchFind.hidden = false;
   await runSearch(`#${tag}`);
@@ -2691,13 +2494,11 @@ async function confirmAndDeleteItem(path, displayName, isDir) {
     if (isDir) showToast(STRINGS.deleting, 10000);
     await api.deleteNote(path);
     invalidateCaches();
-    haptic('success');
     showToast(isDir ? STRINGS.deletedFolder : STRINGS.deleted);
     void refreshSyncBadge();
     void refreshHeatmap();
     void refreshTasksData();
     if (!els.views.editor.hidden) {
-      mainButton.hide();
       await enterExplorer(state.currentPath);
     } else {
       await loadFolder(state.currentPath);
@@ -2730,8 +2531,6 @@ async function openSettings() {
   els.settingsAutosyncInterval.value = String(autosyncIntervalMinutes());
   els.settingsTheme.value = getTheme();
   showView('settings');
-  backButton.show(handleBackNavigation);
-  mainButton.hide();
   try {
     await reloadRepositories();
     const active = state.repositories.find((repo) => repo.isActive) ?? state.repositories[0] ?? null;
@@ -2793,7 +2592,6 @@ function renderRepoList() {
     editBtn.innerHTML = pencilSvg;
     editBtn.setAttribute('aria-label', t('repoEditTitle'));
     editBtn.addEventListener('click', () => {
-      haptic('select');
       bindRepoForm(repo.id);
     });
 
@@ -2825,7 +2623,6 @@ async function switchToRepository(repo) {
     if (isEditorDirty() && !(await showConfirm(STRINGS.confirmRepoSwitchDirty))) {
       return;
     }
-    mainButton.hide();
   }
   resetEditorDraft();
   try {
@@ -2841,7 +2638,6 @@ async function switchToRepository(repo) {
   invalidateCaches();
   renderRepoList();
   bindRepoForm(repo.id);
-  haptic('success');
   showToast(STRINGS.repoSwitched(repoLabel(repo)));
   void refreshSyncBadge();
   void refreshTasksData();
@@ -2882,7 +2678,6 @@ async function saveSettings() {
       restartAutosyncTimer();
       await reloadRepositories();
       bindRepoForm(created.id);
-      haptic('success');
       showToast(STRINGS.repoCreated);
       return;
     }
@@ -2901,7 +2696,6 @@ async function saveSettings() {
     restartAutosyncTimer();
     await reloadRepositories();
     bindRepoForm(editingId);
-    haptic('success');
     showToast(STRINGS.saved);
     if (wasActive === editingId) {
       // The active repository may point somewhere else now — start from the root.
@@ -2911,7 +2705,6 @@ async function saveSettings() {
     void enterExplorer(state.currentPath);
   } catch (error) {
     setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
-    haptic('error');
   }
 }
 
@@ -2924,11 +2717,9 @@ els.settingsAutosync.addEventListener('change', () => {
 // The theme is a client-only preference: apply and persist immediately,
 // without waiting for the settings "Save" button.
 els.settingsTheme.addEventListener('change', () => {
-  haptic('select');
   setTheme(els.settingsTheme.value);
 });
 els.btnRepoAdd.addEventListener('click', () => {
-  haptic('select');
   bindRepoForm(null);
   els.settingsRepoName.focus();
 });
@@ -2955,7 +2746,6 @@ async function deleteCurrentRepoForm() {
     await reloadRepositories();
     const active = state.repositories.find((item) => item.isActive) ?? state.repositories[0] ?? null;
     bindRepoForm(active ? active.id : null);
-    haptic('success');
     showToast(STRINGS.repoDeleted);
     void refreshSyncBadge();
     void refreshTasksData();
@@ -2965,7 +2755,6 @@ async function deleteCurrentRepoForm() {
     } else {
       setError(els.settingsError, error instanceof api.ApiError ? error.message : STRINGS.loadFailed);
     }
-    haptic('error');
   }
 }
 
@@ -2985,10 +2774,8 @@ async function exportArchive() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    haptic('success');
     showToast(STRINGS.exportSuccess);
   } catch (error) {
-    haptic('error');
     showErrorToast(error);
   } finally {
     btn.disabled = false;
@@ -3029,7 +2816,6 @@ els.btnSync.addEventListener('click', () => {
   void (async () => {
     try {
       const { applied, remaining } = await api.syncNow();
-      haptic('success');
       showToast(remaining > 0
         ? `${t('syncDonePartial')(applied, remaining)}`
         : t('syncDone')(applied));
@@ -3063,9 +2849,6 @@ els.btnLang.textContent = getLang() === 'ru' ? 'EN' : 'RU';
 document.addEventListener('language-changed', () => {
   els.explorerTitle.textContent = STRINGS.explorerTitle;
   els.btnLang.textContent = getLang() === 'ru' ? 'EN' : 'RU';
-  if (!els.views.editor.hidden) {
-    mainButton.show(STRINGS.saveBtnIdle, () => void saveCurrentNote());
-  }
   if (state.heatmapOk && !els.activityCard.hidden) {
     renderActivityControls();
     void loadActivityPeriod();
@@ -3073,12 +2856,28 @@ document.addEventListener('language-changed', () => {
 });
 
 els.btnCreateNote.addEventListener('click', () => {
-  haptic('select');
   openEditor('create');
 });
 els.fabCreate.addEventListener('click', () => {
-  haptic('select');
   openEditor('create');
+});
+
+els.btnSignout.addEventListener('click', () => {
+  void (async () => {
+    if (!(await showConfirm(STRINGS.signOutConfirm))) return;
+    try {
+      await api.logout();
+      resetEditorDraft();
+      state.currentPath = '';
+      els.searchInput.value = '';
+      hideSearchResults();
+      invalidateCaches();
+      showView('register');
+      showToast(STRINGS.signedOut);
+    } catch (error) {
+      showErrorToast(error instanceof api.ApiError ? error : new Error(STRINGS.signOutFailed));
+    }
+  })();
 });
 
 els.btnEditorBack.addEventListener('click', () => void leaveEditor());
@@ -3100,12 +2899,7 @@ els.views.register.hidden = true;
 els.views.explorer.hidden = true;
 els.views.editor.hidden = true;
 
-function restartProbe() {
-  void bootstrap();
-}
-
 async function bootstrap() {
-  syncDevBar();
   showView('explorer');
   state.currentPath = '';
   els.explorerTabs.hidden = false;
@@ -3115,16 +2909,14 @@ async function bootstrap() {
   skeletonRows();
   setStatus(STRINGS.loading);
 
-  // Reminder messages deep-link into a note via the startapp payload; the
-  // payload may also carry the repository the note lives in.
-  const deepLink = noteTargetFromStartParam();
+  // A ?note=<path> URL deep-links into a note (web-native bookmarks).
+  const deepLink = noteTargetFromUrl();
 
   try {
     const [items, pinnedPaths] = await Promise.all([api.listNotes(), getPinnedPaths()]);
     renderNotes(Array.isArray(items) ? items : [], pinnedPaths);
     state.currentPath = '';
     renderBreadcrumbs('');
-    updateBackButton();
     void refreshHeatmap();
     void refreshTasksData();
 
@@ -3144,20 +2936,13 @@ async function bootstrap() {
     }
   } catch (error) {
     if (error instanceof api.ApiError && (error.status === 404 || error.status === 401)) {
-      // 404 — the user is not registered yet; 401 — the startup probe could not
-      // be authenticated (no initData / signature check failed). Both mean "we
-      // cannot show the vault yet", so land on a clean registration form
-      // instead of painting a raw error on it. If auth is genuinely broken,
-      // the submit itself will surface a descriptive error.
+      // 401 — no valid session (first visit or an expired one); 404 — the
+      // account is gone. Both mean "we cannot show the vault yet", so land
+      // on the sign-in form instead of painting a raw error on it. If auth
+      // is genuinely broken, the sign-in itself surfaces a descriptive error.
       state.currentPath = '';
       showView('register');
       setError(els.registerError, '');
-      backButton.hide();
-      return;
-    }
-    if (error instanceof api.ApiError && error.status === 400 && /Telegram ID/.test(error.message)) {
-      // Dev mode without a valid test id — stay on explorer with a hint.
-      setStatus(els.devBar.hidden ? STRINGS.loadFailed : t('devBarHint'));
       return;
     }
     showView('register');
@@ -3165,22 +2950,9 @@ async function bootstrap() {
   }
 }
 
-function initTelegram() {
-  const webApp = tg();
-  if (!webApp) return;
-  try {
-    webApp.ready();
-    webApp.expand();
-  } catch {
-    /* SDK quirks outside Telegram */
-  }
-}
-
-initTelegram();
 initI18n();
-// Re-apply the saved theme now that the DOM and the Telegram SDK are up:
-// the pre-paint snippet already set data-theme, this syncs the hljs
-// palettes for "auto" and the Telegram header/body chrome.
+// Re-apply the saved theme now that the DOM is up: the pre-paint snippet
+// already set data-theme, this syncs the hljs palettes for "auto".
 applyTheme(getTheme());
 restartAutosyncTimer();
 void bootstrap();

@@ -47,12 +47,12 @@ public class ExportEndpointsTests
     private IRepositoryContextResolver CreateResolver(AppDbContext db) =>
         new RepositoryContextResolver(db, _encryptionService, NullLogger<RepositoryContextResolver>.Instance);
 
-    private async Task<AppDbContext> CreateDbContextWithUserAsync(long telegramId, string? githubToken)
+    private async Task<AppDbContext> CreateDbContextWithUserAsync(long userId, string? githubToken)
     {
         var db = CreateInMemoryDbContext();
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -61,7 +61,7 @@ public class ExportEndpointsTests
 
         var repository = new Gitenberg.Web.Models.Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/my-notes",
             RepositoryOwner = "owner",
             RepositoryName = "my-notes",

@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using Gitenberg.Web.Database;
-using Gitenberg.Web.Features.Reminders;
 using Gitenberg.Web.Models;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +13,6 @@ public class NoteIndexer(
     AppDbContext dbContext,
     IGitHubService gitHubService,
     ITokenEncryptionService encryptionService,
-    ReminderService reminderService,
     ILogger<NoteIndexer> logger
 )
 {
@@ -22,23 +20,23 @@ public class NoteIndexer(
     {
         var userIds = await dbContext.Users.Select(u => u.TelegramId).ToListAsync(cancellationToken);
 
-        foreach (var telegramId in userIds)
+        foreach (var userId in userIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await SynchronizeUserRepositoriesAsync(telegramId, targetRepositoryId: null, cancellationToken);
+            await SynchronizeUserRepositoriesAsync(userId, targetRepositoryId: null, cancellationToken);
         }
     }
 
-    public async Task SynchronizeUserByIdAsync(long telegramId, int? repositoryId = null, CancellationToken cancellationToken = default)
+    public async Task SynchronizeUserByIdAsync(long userId, int? repositoryId = null, CancellationToken cancellationToken = default)
     {
-        var userExists = await dbContext.Users.AnyAsync(u => u.TelegramId == telegramId, cancellationToken);
+        var userExists = await dbContext.Users.AnyAsync(u => u.TelegramId == userId, cancellationToken);
         if (!userExists) return;
-        await SynchronizeUserRepositoriesAsync(telegramId, repositoryId, cancellationToken);
+        await SynchronizeUserRepositoriesAsync(userId, repositoryId, cancellationToken);
     }
 
-    private async Task SynchronizeUserRepositoriesAsync(long telegramId, int? targetRepositoryId, CancellationToken cancellationToken)
+    private async Task SynchronizeUserRepositoriesAsync(long userId, int? targetRepositoryId, CancellationToken cancellationToken)
     {
-        var query = dbContext.Repositories.Where(r => r.TelegramUserId == telegramId);
+        var query = dbContext.Repositories.Where(r => r.TelegramUserId == userId);
         if (targetRepositoryId is { } repositoryId)
         {
             query = query.Where(r => r.Id == repositoryId);
@@ -207,8 +205,6 @@ public class NoteIndexer(
                 cancellationToken
             );
 
-            // External edits can add or remove "@remind" markers — reconcile.
-            await reminderService.UpsertForNoteAsync(repository.TelegramUserId, repository.Id, path, content);
 
             updatedCount++;
         }
@@ -220,7 +216,6 @@ public class NoteIndexer(
                 $"DELETE FROM NoteSearchFts WHERE TelegramUserId = {userId} AND RepositoryId = {repositoryId} AND NotePath = {path}",
                 cancellationToken
             );
-            await reminderService.RemoveForNoteAsync(repository.TelegramUserId, repository.Id, path);
             removedCount++;
         }
 

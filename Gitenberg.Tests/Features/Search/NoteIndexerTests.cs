@@ -75,11 +75,11 @@ public class NoteIndexerTests
         return (RepositoryContent)constructor.Invoke(args);
     }
 
-    private async Task<User> SeedUserAsync(AppDbContext db, long telegramId = 12345)
+    private async Task<User> SeedUserAsync(AppDbContext db, long userId = 12345)
     {
         var user = new User
         {
-            TelegramId = telegramId,
+            TelegramId = userId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow,
         };
@@ -88,7 +88,7 @@ public class NoteIndexerTests
 
         var repository = new Repository
         {
-            TelegramUserId = telegramId,
+            TelegramUserId = userId,
             DisplayName = "owner/repo",
             RepositoryOwner = "owner",
             RepositoryName = "repo",
