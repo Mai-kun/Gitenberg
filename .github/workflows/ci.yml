@@ -1,16 +1,35 @@
-name: Test Suite
+name: Build, Publish and Push to Release Branch
 
 on:
     push:
         branches: [master, main]
 
 jobs:
-    test:
+    build-and-publish:
         runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
         steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-dotnet@v4
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
               with:
                   dotnet-version: "10.0.x"
-            - run: dotnet restore
-            - run: dotnet test --no-restore
+
+            - name: Run Tests
+              run: dotnet test
+
+            # 1. Компилируем готовый релиз на мощных серверах GitHub
+            - name: Publish Web App
+              run: dotnet publish Gitenberg.Web/Gitenberg.Web.csproj -c Release -o ./publish
+
+            # 2. Пушим готовые .dll файлы в ветку "release"
+            - name: Deploy to Release Branch
+              uses: peaceiris/actions-gh-pages@v4
+              with:
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  publish_dir: ./publish
+                  publish_branch: release
