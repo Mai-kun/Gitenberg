@@ -1,4 +1,10 @@
 using System.Globalization;
+using Gitenberg.Web.Database;
+using Gitenberg.Web.Features.Auth;
+using Gitenberg.Web.Features.Search;
+using Gitenberg.Web.Features.Sync;
+using Gitenberg.Web.Services.Abstractions;
+using Microsoft.EntityFrameworkCore;
 
 namespace Gitenberg.Web.Features.Graph;
 
