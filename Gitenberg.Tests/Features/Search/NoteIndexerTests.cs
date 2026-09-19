@@ -127,7 +127,7 @@ public class NoteIndexerTests
             ]
         );
         _gitHubService.GetNoteContentFunc = (_, path) =>
-            Task.FromResult($"Content of {path} about kernel scheduling.");
+            Task.FromResult<string?>($"Content of {path} about kernel scheduling.");
 
         // Act
         await CreateIndexer(db).SynchronizeAllUsersAsync();
@@ -156,7 +156,7 @@ public class NoteIndexerTests
         _gitHubService.GetNoteContentFunc = (_, _) =>
         {
             downloadCount++;
-            return Task.FromResult("Content about kernel scheduling.");
+            return Task.FromResult<string?>("Content about kernel scheduling.");
         };
 
         var indexer = CreateIndexer(db);
@@ -181,7 +181,7 @@ public class NoteIndexerTests
         _gitHubService.GetNotesFunc = (_, _) => Task.FromResult<IReadOnlyList<RepositoryContent>>(
             [CreateRepositoryContent("note1.md", "notes/note1.md", sha)]
         );
-        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult("The alpha release notes.");
+        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult<string?>("The alpha release notes.");
 
         var indexer = CreateIndexer(db);
 
@@ -192,7 +192,7 @@ public class NoteIndexerTests
         _gitHubService.GetNotesFunc = (_, _) => Task.FromResult<IReadOnlyList<RepositoryContent>>(
             [CreateRepositoryContent("note1.md", "notes/note1.md", sha)]
         );
-        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult("The beta release notes.");
+        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult<string?>("The beta release notes.");
 
         await indexer.SynchronizeAllUsersAsync();
 
@@ -219,7 +219,7 @@ public class NoteIndexerTests
         _gitHubService.GetNotesFunc = (_, _) => Task.FromResult<IReadOnlyList<RepositoryContent>>(
             remotePaths.Select(NoteFor).ToList()
         );
-        _gitHubService.GetNoteContentFunc = (_, path) => Task.FromResult($"Content of {path} about kernel scheduling.");
+        _gitHubService.GetNoteContentFunc = (_, path) => Task.FromResult<string?>($"Content of {path} about kernel scheduling.");
 
         var indexer = CreateIndexer(db);
         await indexer.SynchronizeAllUsersAsync();

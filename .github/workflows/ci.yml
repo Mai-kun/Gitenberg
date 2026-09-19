@@ -3,6 +3,12 @@ name: Build, Publish and Push to Release Branch
 on:
     push:
         branches: [master, main]
+        paths:
+            - "**/*.cs"
+            - "**/*.csproj"
+            - "**/*.json"
+            - "**/*.yml"
+            - "**/*.yaml"
 
 jobs:
     build-and-publish:
@@ -13,18 +19,31 @@ jobs:
         steps:
             - name: Checkout Code
               uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
             - name: Setup .NET
               uses: actions/setup-dotnet@v4
               with:
                   dotnet-version: "10.0.x"
 
+            - name: Cache NuGet packages
+              uses: actions/cache@v4
+              with:
+                  path: ~/.nuget/packages
+                  key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+                  restore-keys: |
+                      ${{ runner.os }}-nuget-
+
+            - name: Restore dependencies
+              run: dotnet restore
+
             - name: Run Tests
-              run: dotnet test
+              run: dotnet test --no-restore
 
             # 1. Компилируем готовый релиз на мощных серверах GitHub
             - name: Publish Web App
-              run: dotnet publish Gitenberg.Web/Gitenberg.Web.csproj -c Release -o ./publish
+              run: dotnet publish Gitenberg.Web/Gitenberg.Web.csproj -c Release -o ./publish --no-restore
 
             # 2. Пушим готовые .dll файлы в ветку "release"
             - name: Deploy to Release Branch

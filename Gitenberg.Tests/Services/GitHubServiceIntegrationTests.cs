@@ -15,7 +15,7 @@ public class GitHubServiceIntegrationTests
     public GitHubServiceIntegrationTests()
     {
         var config = new ConfigurationBuilder()
-                     .AddJsonFile("secrets.json", false, false)
+                     .AddJsonFile("secrets.json", optional: true, reloadOnChange: false)
                      .Build();
 
         var token = config["GitHub:TestToken"];

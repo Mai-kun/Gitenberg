@@ -492,3 +492,7 @@ data/
 keys/
 temp-keys/
 seq-data/
+
+# Secrets and secrets configuration
+**/secrets.json
+*.local.*

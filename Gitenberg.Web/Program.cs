@@ -15,6 +15,7 @@ using Gitenberg.Web.Infrastructure;
 using Gitenberg.Web.Services;
 using Gitenberg.Web.Services.Abstractions;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -105,6 +106,15 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
+// Configure forwarded headers for reverse proxy support
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    // Trust loopback addresses for development
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
 app.UseExceptionHandler();
 // API responses are authenticated by a cookie and carry per-user data, so
@@ -124,6 +134,28 @@ app.Use((context, next) =>
 app.UseHttpsRedirection();
 app.UseSerilogRequestLogging();
 app.UseRateLimiter();
+
+// Security headers to protect against common web vulnerabilities
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.XContentTypeOptions = "nosniff";
+    context.Response.Headers.XFrameOptions = "DENY";
+    // Content-Security-Policy will be added based on environment
+    if (app.Environment.IsDevelopment())
+    {
+        // More permissive in development for easier testing
+        context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';";
+    }
+    else
+    {
+        // Strict CSP in production
+        context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self';";
+    }
+    await next();
+});
+
+// Support for reverse proxy scenarios
+app.UseForwardedHeaders();
 
 using (var scope = app.Services.CreateScope())
 {

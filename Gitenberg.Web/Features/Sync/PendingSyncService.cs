@@ -53,7 +53,7 @@ public class PendingSyncService(AppDbContext dbContext)
         var uid = userId.ToString(CultureInfo.InvariantCulture);
         var rid = repositoryId.ToString(CultureInfo.InvariantCulture);
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO PendingNoteOps (TelegramUserId, RepositoryId, Kind, FromPath, ToPath, Content, CommitMessage, CreatedAt) VALUES ({uid}, {rid}, {kind}, {fromPath.Trim('/')}, {toPath}, {content}, {commitMessage}, {DateTime.UtcNow.ToString("o")})");
+            $"INSERT INTO PendingNoteOps (TelegramUserId, RepositoryId, Kind, FromPath, ToPath, Content, CommitMessage, CreatedAt) VALUES ({uid}, {rid}, {kind}, {fromPath.Trim('/')}, {toPath?.Trim('/')}, {content}, {commitMessage}, {DateTime.UtcNow.ToString("o")})");
     }
 
     public async Task<List<PendingOp>> GetOpsAsync(long userId, int repositoryId)
@@ -175,6 +175,11 @@ public class PendingSyncService(AppDbContext dbContext)
 
                 await DeleteOpAsync(op.Id);
                 applied++;
+            }
+            catch (OperationCanceledException)
+            {
+                // Re-throw cancellation to allow proper handling upstream
+                throw;
             }
             catch (Exception)
             {

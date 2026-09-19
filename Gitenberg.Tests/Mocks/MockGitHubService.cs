@@ -33,7 +33,7 @@ public class MockGitHubService : IGitHubService
     {
         return GetNoteContentFunc != null
             ? GetNoteContentFunc(context, path)
-            : Task.FromResult(string.Empty);
+            : Task.FromResult<string?>(string.Empty);
     }
 
     public Task CreateOrUpdateNoteAsync(

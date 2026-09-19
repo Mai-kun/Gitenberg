@@ -99,8 +99,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         RebuildNoteSearchFtsWithRepositoryId();
     }
 
+    private static readonly HashSet<string> AllowedTables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PendingNoteOps",
+        "Users",
+        "IndexedNotes",
+        "NoteSearchFts",
+        "Repositories",
+        "WebSessions",
+        "PinnedItems",
+        "NoteShareLinks"
+    };
+
     private void BackfillRepositoryIdColumn(string tableName)
     {
+        if (!AllowedTables.Contains(tableName))
+        {
+            throw new ArgumentException($"Table name '{tableName}' is not allowed.", nameof(tableName));
+        }
+
         if (!TableExists(tableName))
         {
             return;
@@ -187,6 +204,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
 
     private HashSet<string> GetTableColumns(string tableName)
     {
+        if (!AllowedTables.Contains(tableName))
+        {
+            throw new ArgumentException($"Table name '{tableName}' is not allowed.", nameof(tableName));
+        }
+
         var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!TableExists(tableName))
         {

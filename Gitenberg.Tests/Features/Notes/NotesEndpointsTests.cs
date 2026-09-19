@@ -290,7 +290,7 @@ public class NotesEndpointsTests
         await using var db = CreateInMemoryDbContext();
         await CreateUserAsync(db, 12345);
 
-        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult("Hello world note content");
+        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult<string?>("Hello world note content");
 
         // Act
         var result = await NotesEndpoints.GetNoteContent(

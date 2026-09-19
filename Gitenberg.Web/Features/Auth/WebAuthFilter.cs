@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Gitenberg.Web.Features.Auth;
 
@@ -10,7 +11,8 @@ namespace Gitenberg.Web.Features.Auth;
 public sealed class WebAuthFilter(
     WebAuthService sessions,
     WebAuthConfiguration config,
-    IWebHostEnvironment environment
+    IWebHostEnvironment environment,
+    ILogger<WebAuthFilter> logger
 ) : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
@@ -27,6 +29,8 @@ public sealed class WebAuthFilter(
 
         if (environment.IsDevelopment())
         {
+            logger.LogWarning("Auth bypassed in development mode for request to {Path}. Authentication is disabled for testing purposes.",
+                httpContext.Request.Path);
             return await next(context);
         }
 

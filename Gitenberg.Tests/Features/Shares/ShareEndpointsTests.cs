@@ -186,7 +186,7 @@ public class ShareEndpointsTests
     {
         await using var db = CreateInMemoryDbContext();
         await CreateUserAsync(db, 12345);
-        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult("# Hello");
+        _gitHubService.GetNoteContentFunc = (_, _) => Task.FromResult<string?>("# Hello");
 
         var shareLinks = CreateShareLinks(db);
         var first = await ShareEndpoints.CreateShareLink(
@@ -235,7 +235,7 @@ public class ShareEndpointsTests
         _gitHubService.GetNoteContentFunc = (_, _) =>
         {
             gitHubCalled = true;
-            return Task.FromResult("stale remote content");
+            return Task.FromResult<string?>("stale remote content");
         };
 
         var result = await ShareEndpoints.CreateShareLink(
@@ -350,7 +350,7 @@ public class ShareEndpointsTests
         {
             ctx.Token.Should().Be("pat_123");
             path.Should().Be("notes/idea.md");
-            return Task.FromResult("# Idea\n\nBody");
+            return Task.FromResult<string?>("# Idea\n\nBody");
         };
         var shareLinks = CreateShareLinks(db);
         var link = await shareLinks.CreateOrGetAsync(12345, 1, "notes/idea.md");
@@ -436,7 +436,7 @@ public class ShareEndpointsTests
         _gitHubService.GetNoteContentFunc = (ctx, _) =>
         {
             usedToken = ctx.Token;
-            return Task.FromResult("content");
+            return Task.FromResult<string?>("content");
         };
 
         var shareLinks = CreateShareLinks(db);
