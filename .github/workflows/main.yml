@@ -1,0 +1,40 @@
+name: Build, Test & Deploy to Wispbyte
+
+on:
+    push:
+        branches: [master, main] # Срабатывает при пуше в основную ветку
+
+jobs:
+    test:
+        name: Run Tests
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                  dotnet-version: "10.0.x" # Ваша версия .NET
+
+            - name: Restore Dependencies
+              run: dotnet restore
+
+            - name: Run Tests
+              run: dotnet test --no-restore --verbosity normal
+
+    deploy:
+        name: Trigger Wispbyte Restart
+        needs: test # Деплой запустится ТОЛЬКО если все тесты прошли успешно!
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Restart Server via Pterodactyl API
+              run: |
+                  curl -s -X POST "${{ secrets.WISP_PANEL_URL }}/api/client/servers/${{ secrets.WISP_SERVER_ID }}/power" \
+                    -H "Authorization: Bearer ${{ secrets.WISP_API_KEY }}" \
+                    -H "Content-Type: application/json" \
+                    -H "Accept: application/json" \
+                    -d '{"signal": "restart"}' \
+                    --fail-with-body
