@@ -1,14 +1,4 @@
 using System.Globalization;
-using Gitenberg.Web.Database;
-using Gitenberg.Web.Features.Auth;
-using Gitenberg.Web.Features.Search;
-using Gitenberg.Web.Features.Sync;
-using Gitenberg.Web.Services.Abstractions;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
 
 namespace Gitenberg.Web.Features.Graph;
 
@@ -18,13 +8,14 @@ public static class GraphEndpoints
 
     public static void MapGraphEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/notes")
-                       .WithTags("Graph")
-                       .RequireAuth();
+        var group = app.MapGroup("/api/notes").WithTags("Graph").RequireAuth();
 
-        group.MapGet("/graph", GetGraph)
-             .WithName("GetNotesGraph")
-             .WithSummary("All notes of the active repository and their [[WikiLink]] connections as a link graph");
+        group
+            .MapGet("/graph", GetGraph)
+            .WithName("GetNotesGraph")
+            .WithSummary(
+                "All notes of the active repository and their [[WikiLink]] connections as a link graph"
+            );
     }
 
     public static async Task<IResult> GetGraph(
@@ -55,9 +46,6 @@ public static class GraphEndpoints
             return Results.Ok(new WikiGraph([], []));
         }
 
-        // Same freshness contract as search and tasks: refresh the active
-        // repository's index first (cheap when nothing changed), then read
-        // the whole vault from it.
         try
         {
             await indexer.SynchronizeUserByIdAsync(userId.Value, repository.RepositoryId);
@@ -69,12 +57,16 @@ public static class GraphEndpoints
 
         var uid = userId.Value.ToString(CultureInfo.InvariantCulture);
         var rid = repository.RepositoryId.ToString(CultureInfo.InvariantCulture);
-        var rows = await dbContext.Database.SqlQuery<FtsNoteRow>(
-            $"SELECT NotePath AS NotePath, Content AS Content FROM NoteSearchFts WHERE TelegramUserId = {uid} AND RepositoryId = {rid}"
-        ).ToListAsync();
+        var rows = await dbContext
+            .Database.SqlQuery<FtsNoteRow>(
+                $"SELECT NotePath AS NotePath, Content AS Content FROM NoteSearchFts WHERE TelegramUserId = {uid} AND RepositoryId = {rid}"
+            )
+            .ToListAsync();
 
-        // Pending local changes win over the indexed remote content.
-        var (excluded, overrides) = await pendingSync.GetContentOverlayAsync(userId.Value, repository.RepositoryId);
+        var (excluded, overrides) = await pendingSync.GetContentOverlayAsync(
+            userId.Value,
+            repository.RepositoryId
+        );
 
         var notes = new List<(string Path, string Content)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -91,7 +83,6 @@ public static class GraphEndpoints
             notes.Add((row.NotePath, content ?? string.Empty));
         }
 
-        // Brand-new notes that exist only as pending saves (no indexed row).
         foreach (var (path, content) in overrides)
         {
             if (excluded.Contains(path) || !seen.Add(path))

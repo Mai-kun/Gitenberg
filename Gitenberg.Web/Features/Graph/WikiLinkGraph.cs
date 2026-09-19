@@ -8,10 +8,6 @@ public sealed record GraphLink(string Source, string Target);
 
 public sealed record WikiGraph(IReadOnlyList<GraphNode> Nodes, IReadOnlyList<GraphLink> Links);
 
-// Turns vault notes into a link graph. [[WikiLink]] targets are resolved to
-// existing notes the way the browser preview does it: a path match first,
-// then a vault-wide match on the file name (shortest path wins when several
-// folders hold the same name). Targets that resolve to nothing are dropped.
 public static partial class WikiLinkGraph
 {
     [GeneratedRegex(@"\[\[([^\]<>\n]+?)\]\]")]
@@ -20,7 +16,10 @@ public static partial class WikiLinkGraph
     [GeneratedRegex(@"^\s*(```|~~~)")]
     private static partial Regex FenceRegex();
 
-    public static WikiGraph Build(IEnumerable<(string Path, string Content)> notes, int maxNodes = 1000)
+    public static WikiGraph Build(
+        IEnumerable<(string Path, string Content)> notes,
+        int maxNodes = 1000
+    )
     {
         var paths = new List<string>();
         var targetsByNote = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -54,8 +53,6 @@ public static partial class WikiLinkGraph
                 return direct;
             }
 
-            // A target carrying a folder separator only ever matches a path;
-            // a bare name may match the file name anywhere in the vault.
             if (target.Contains('/') || !byName.TryGetValue(target, out var candidates))
             {
                 return null;
@@ -70,7 +67,10 @@ public static partial class WikiLinkGraph
             foreach (var target in targets)
             {
                 var resolved = Resolve(target);
-                if (resolved == null || string.Equals(resolved, path, StringComparison.OrdinalIgnoreCase))
+                if (
+                    resolved == null
+                    || string.Equals(resolved, path, StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     continue;
                 }
@@ -97,8 +97,6 @@ public static partial class WikiLinkGraph
         );
     }
 
-    // WikiLink targets ([[target]] or [[target|label]]) in one note body,
-    // code fences skipped — the same occurrences the preview would render.
     public static List<string> ExtractTargets(string? content)
     {
         var targets = new List<string>();
